@@ -112,6 +112,7 @@ namespace HomeKit_Test
         const string DeviceCode = "143-83-105";
         const Byte generator = 5;
         UInt32[] g = { generator };
+        Random random = new Random();
 
         bool paired = false;
         public Form1()
@@ -231,10 +232,16 @@ namespace HomeKit_Test
             //    //AddToLogBox(i.ToString() + " " + i.ToString("X8") + "\r\n");
             //    AddToLogBox(i.ToString("X8") + "\r\n");
             //}
-            //foreach (UInt32 i in R_inv)
+
+            //Byte[] byteTest = new byte[] { 0x69, 0x69 };
+            
+
+            //appendTLVBytes(ref byteTest, 0x12, Enumerable.Repeat((Byte)0x61,300).ToArray());
+            
+            //foreach (Byte i in byteTest)
             //{
             //    //AddToLogBox(i.ToString() + " " + i.ToString("X8") + "\r\n");
-            //    AddToLogBox(i.ToString("X8") + "\r\n");
+            //    AddToLogBox(i.ToString("X2") + "\r\n");
             //}
 
             //       BigInteger bigIntTest = BigInteger.ModPow(bigA, bigB, bigMod);
@@ -272,7 +279,7 @@ namespace HomeKit_Test
             String data = null;
             int numConnects = 0;
             Byte[] received = new Byte[1];
-            Random random = new Random();
+            
             while (true)
             {
                 TcpClient client = server.AcceptTcpClient();
@@ -370,16 +377,31 @@ namespace HomeKit_Test
                                             if (paired)
                                             {
                                                 Byte[] responseBytes = new Byte[] { 0x06, 0x01, 0x02, 0x07, 0x01, 0x06 };
-                                                sendHTTPResponse(stream, "200", "application/pairing+tlv8", responseBytes, responseBytes.Length);
-                                                AddToLogBox("Send Response: " + responseBytes.Length + "\r\n");
+                                                sendTLVResponse(stream, responseBytes);
+                                                
+                                                
                                             }
                                             else
                                             {
                                                 String userName = "Pair-Setup";
-                                                Byte[] salt = new Byte[16];
-                                                for (int curByte = 0; curByte < 16; curByte++) { salt[curByte] = (byte)random.Next(); }
 
+                                                Byte[] salt = byteGenRandom(16) ;
+                                               
+                                                storedx = generatePrivateKey(toUInt32ArrayLE(byteArrayReverse(salt)), userName, DeviceCode);
+                                                storedv = generateVerifier(storedx);
+                                                storedk = generateMultiplier();
+                                                //storedA = generatePublicA(a);
+                                                storedB = generatePublicB(storedk, storedv);
+                                                //storedu = generateScrambling(storedA, storedB);
+                                                //storedS = generateSessionSecret(storedA, storedv, storedu, b);
+                                                //storedK = generateSessionKey(storedS);
 
+                                                Byte[] TLVResponse = new byte[0];
+                                                appendTLVBytes(ref TLVResponse, 0x06, new byte[] { 0x02 });
+                                                appendTLVBytes(ref TLVResponse, 0x02, salt);
+                                                appendTLVBytes(ref TLVResponse, 0x03, byteArrayReverse(fromUInt32Array(storedB)));
+
+                                                sendTLVResponse(stream, TLVResponse);
 
                                             }
 
@@ -393,8 +415,53 @@ namespace HomeKit_Test
 
                         break;
                 }
+                AddToLogBox("Conection Dropped");
             }
         }
+
+        void sendTLVResponse(NetworkStream stream, Byte[] responseBytes)
+        {
+            sendHTTPResponse(stream, "200", "application/pairing+tlv8", responseBytes, responseBytes.Length);
+            AddToLogBox("Send Response: " + responseBytes.Length + "\r\n");
+        }
+
+        void appendTLVBytes(ref Byte[] bytesIn, Byte TLVkey, Byte[] TLVValue)
+        {
+            int curPos = 0;
+            int n = TLVValue.Length;
+            
+            do
+            {
+                bytesIn = bytesIn.Append(TLVkey).ToArray();
+                int curLength = n - curPos;
+                if (curLength > 255) curLength = 255;
+                bytesIn = bytesIn.Append((byte)curLength).ToArray();
+                int curEnd = curPos + curLength;
+                if (curLength != 0)
+                {
+                    Byte[] TLVData = new byte[curLength];
+                    for (int i = 0; curPos + i < curEnd; i++)
+                    {
+                        TLVData[i] = TLVValue[curPos + i];
+                    }
+                    bytesIn = bytesIn.Concat(TLVData).ToArray();
+                    curPos = curEnd;
+                }
+
+            } while (curPos < n) ;
+
+            return;
+
+
+        }
+        
+        Byte[] byteGenRandom(int length)
+        {
+            Byte[] x = new byte[length];
+            for (int curByte = 0; curByte < 16; curByte++) { x[curByte] = (byte)random.Next(); }
+            return x;
+        }
+
         private void AddToLogBox(string TextIn)
         {
             label1.BeginInvoke((MethodInvoker)delegate ()
