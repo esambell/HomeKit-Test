@@ -107,12 +107,15 @@ namespace HomeKit_Test
         UInt32[] storedx;
         UInt32[] storedu;
         UInt32[] storedS;
+        Byte[] storeds;
 
         const int DevicePort = 5252;
         const string DeviceCode = "143-83-105";
         const Byte generator = 5;
         UInt32[] g = { generator };
         Random random = new Random();
+        String userName = "Pair-Setup";
+        MulticastService mdns;
 
         bool paired = false;
         public Form1()
@@ -128,9 +131,11 @@ namespace HomeKit_Test
             N = UInt32ArrayReverse(N);
             a = UInt32ArrayReverse(a);
             b = UInt32ArrayReverse(b);
+            s = UInt32ArrayReverse(s);
 
+            label2.Text = DeviceCode;
 
-            var mdns = new MulticastService(NetFilter);
+            mdns = new MulticastService(NetFilter);
             mdns.UseIpv4 = true;
             mdns.UseIpv6 = false;
 
@@ -275,11 +280,11 @@ namespace HomeKit_Test
         {
             TcpListener server = new TcpListener(IPAddress.Any, DevicePort);
             server.Start();
-            Byte[] bytes = new Byte[256];
+            Byte[] bytes = new Byte[0xfFff];
             String data = null;
             int numConnects = 0;
             Byte[] received = new Byte[1];
-            
+
             while (true)
             {
                 TcpClient client = server.AcceptTcpClient();
@@ -353,72 +358,124 @@ namespace HomeKit_Test
 
                         }
 
-                        if (dataBytesReceived == contentLength && !parsingHeader) break;
+                        if (dataBytesReceived == contentLength && !parsingHeader)
+                        {
+                            AddToLogBox(dataBytesReceived.ToString() + " Bytes Recevied\r\n");
+                            processHTTP(stream, requestType, uri, bytes, dataBytesReceived);
+                            parsingHeader = true;
+                            request = "";
+                            dataBytesReceived = 0;
+                        }
+                        
 
                     }
-                    if (dataBytesReceived == contentLength && !parsingHeader) break;
+                    
                 }
-                AddToLogBox(dataBytesReceived.ToString() + " Bytes Recevied\r\n");
-                switch (requestType)
-                {
-                    case "POST":
-                        switch (uri)
-                        {
-                            case "/pair-setup":
-
-                                int stateIndex = findTLVIndex(bytes, dataBytesReceived, 0x6);
-                                int state = bytes[stateIndex + 2];
-                                AddToLogBox("State Index: " + stateIndex.ToString() + " State: " + state + "\r\n");
-                                switch (state)
-                                {
-                                    case 1:
-
-                                        {
-                                            if (paired)
-                                            {
-                                                Byte[] responseBytes = new Byte[] { 0x06, 0x01, 0x02, 0x07, 0x01, 0x06 };
-                                                sendTLVResponse(stream, responseBytes);
-                                                
-                                                
-                                            }
-                                            else
-                                            {
-                                                String userName = "Pair-Setup";
-
-                                                Byte[] salt = byteGenRandom(16) ;
-                                               
-                                                storedx = generatePrivateKey(toUInt32ArrayLE(byteArrayReverse(salt)), userName, DeviceCode);
-                                                storedv = generateVerifier(storedx);
-                                                storedk = generateMultiplier();
-                                                //storedA = generatePublicA(a);
-                                                storedB = generatePublicB(storedk, storedv);
-                                                //storedu = generateScrambling(storedA, storedB);
-                                                //storedS = generateSessionSecret(storedA, storedv, storedu, b);
-                                                //storedK = generateSessionKey(storedS);
-
-                                                Byte[] TLVResponse = new byte[0];
-                                                appendTLVBytes(ref TLVResponse, 0x06, new byte[] { 0x02 });
-                                                appendTLVBytes(ref TLVResponse, 0x02, salt);
-                                                appendTLVBytes(ref TLVResponse, 0x03, byteArrayReverse(fromUInt32Array(storedB)));
-
-                                                sendTLVResponse(stream, TLVResponse);
-
-                                            }
-
-                                            break;
-                                        }
-
-                                }
-                                break;
-
-                        }
-
-                        break;
-                }
-                AddToLogBox("Conection Dropped");
+               
             }
+
+
+
         }
 
+        void processHTTP(NetworkStream stream, String requestType, String uri, Byte[] bytes, int dataBytesReceived)
+        {
+            switch (requestType)
+            {
+                case "POST":
+                    switch (uri)
+                    {
+                        case "/pair-setup":
+
+                            Byte[] TLVState = findTLVKey(bytes, 0x06, dataBytesReceived);
+                            if (TLVState == null || TLVState.Length == 0) break;
+                            int state = TLVState[0];
+                            AddToLogBox("State: " + state + "\r\n");
+                            switch (state)
+                            {
+                                case 1:
+
+                                    {
+                                        if (paired)
+                                        {
+                                            Byte[] responseBytes = new Byte[] { 0x06, 0x01, 0x02, 0x07, 0x01, 0x06 };
+                                            sendTLVResponse(stream, responseBytes);
+
+
+                                        }
+                                        else
+                                        {
+                                            
+
+                                            storeds = byteGenRandom(16);
+
+                                            storedx = generatePrivateKey(toUInt32ArrayLE(byteArrayReverse(storeds)), userName, DeviceCode);
+                                            storedv = generateVerifier(storedx);
+                                            storedk = generateMultiplier();
+                                            //storedA = generatePublicA(a);
+                                            storedb = toUInt32Array(byteGenRandom(32));
+                                            storedB = generatePublicB(storedk, storedv, storedb);
+                                            
+
+                                            Byte[] TLVResponse = new byte[0];
+                                            appendTLVBytes(ref TLVResponse, 0x06, new byte[] { 0x02 });
+                                            appendTLVBytes(ref TLVResponse, 0x02, storeds);
+                                            appendTLVBytes(ref TLVResponse, 0x03, byteArrayReverse(fromUInt32Array(storedB)));
+
+                                            sendTLVResponse(stream, TLVResponse);
+
+                                        }
+
+                                        break;
+                                    }
+                                case 3:
+                                    {
+                                        Byte[] publicA = findTLVKey(bytes, 0x03, dataBytesReceived);
+                                        Byte[] proofA = findTLVKey(bytes, 0x04, dataBytesReceived);
+
+                                        storedu = generateScrambling(toUInt32Array(publicA), storedB);
+                                        storedS = generateSessionSecret(toUInt32Array(publicA), storedv, storedu, storedb);
+                                        storedK = generateSessionKey(storedS);
+
+                                        Byte[] hashN = genSHA512(N);
+                                        Byte[] gPad = new byte[hashN.Length];
+                                        gPad[gPad.Length - 1] = generator;
+                                        Byte[] hashG = genSHA512(gPad);
+                                        Byte[] NxorG = new Byte[hashN.Length];
+                                        for (int i = 0; i < NxorG.Length;i++) NxorG[i]= (byte)(hashN[i] ^ hashG[i]);
+                                        Byte[] hashI = genSHA512(userName);
+                                        Byte[] publicB = byteArrayReverse(fromUInt32Array(storedB));
+                                        Byte[] K = byteArrayReverse(fromUInt32Array(storedK));
+
+                                        Byte[] localProofA = genSHA512(NxorG, hashI, storeds, publicA, publicB, K);
+
+
+
+
+
+
+
+                                        AddToLogBox("public A Length: " + publicA.Length.ToString());
+                                        if (proofA == null)
+                                        {
+                                            AddToLogBox("proof A null");
+                                            break;
+                                        }
+                                        AddToLogBox("proof A Length: " + proofA.Length.ToString());
+
+                                        break;
+
+                                    }
+
+                            }
+                            break;
+
+                    }
+
+                    break;
+            }
+
+        }
         void sendTLVResponse(NetworkStream stream, Byte[] responseBytes)
         {
             sendHTTPResponse(stream, "200", "application/pairing+tlv8", responseBytes, responseBytes.Length);
@@ -454,11 +511,45 @@ namespace HomeKit_Test
 
 
         }
+
+        Byte[] findTLVKey(Byte[] TLVIn, Byte TLVKey, int bytesReceived)
+        {
+
+            int n = bytesReceived;
+            int curPos = 0;
+            Byte[] returnVal = new byte[0];
+            bool found = false;
+
+            while (curPos < n - 1)
+            {
+                int curLength = TLVIn[curPos + 1];
+                if (TLVIn[curPos] == TLVKey && curLength > 0)
+                {
+                    found = true;
+                    Byte[] TLVData = new byte[curLength];
+                    for (int i = curPos + 2; i< curPos+curLength + 2; i++)
+                    {
+                        TLVData[i - curPos - 2] = TLVIn[i];
+                    }
+                    returnVal = returnVal.Concat(TLVData).ToArray();
+                    
+                }
+                curPos += curLength + 2;
+            }
+            if (found)
+            {
+                return returnVal;
+            }
+            else return null;
+
+
+
+        }
         
         Byte[] byteGenRandom(int length)
         {
             Byte[] x = new byte[length];
-            for (int curByte = 0; curByte < 16; curByte++) { x[curByte] = (byte)random.Next(); }
+            for (int curByte = 0; curByte < length; curByte++) { x[curByte] = (byte)random.Next(); }
             return x;
         }
 
@@ -548,6 +639,35 @@ namespace HomeKit_Test
             returnVal.hi = UInt32.Parse(stringIn.Substring(0, 8), System.Globalization.NumberStyles.HexNumber);
             returnVal.lo = UInt32.Parse(stringIn.Substring(8, 8), System.Globalization.NumberStyles.HexNumber);
             return returnVal;
+        }
+
+        Byte[] genSHA512(params Byte[][] list)
+        {
+            Byte[] toHash = new byte[0];
+
+            foreach(Byte[] i in list)
+            {
+                toHash = toHash.Concat(i).ToArray();
+            }
+
+            return genSHA512(toHash);
+
+
+        }
+
+        Byte[] genSHA512(UInt32[] msg)
+        {
+            Byte[] toHash = byteArrayReverse(fromUInt32Array(N));
+  
+            return genSHA512(toHash); ;
+
+        }
+
+        Byte[] genSHA512(String msg)
+        {
+            
+            return genSHA512(Encoding.UTF8.GetBytes(msg));
+
         }
 
         Byte[] genSHA512(Byte[] msg)
@@ -792,7 +912,7 @@ namespace HomeKit_Test
 
         }
 
-        int32Array toUInt32Array(Byte[] byteArray)
+        UInt32[] toUInt32Array(Byte[] byteArray)
         {
             int outputSize = (int)Math.Ceiling((decimal)byteArray.Length / 4);
             UInt32[] digits = new uint[outputSize];
@@ -806,11 +926,9 @@ namespace HomeKit_Test
                 }
             }
 
-            int32Array returnVal;
-            returnVal.digits = digits;
-            returnVal.negative = false;
+            
 
-            return returnVal;
+            return digits;
         }
 
         UInt32[] toUInt32ArrayLE(Byte[] byteArray)
@@ -1332,7 +1450,7 @@ namespace HomeKit_Test
             storedv = generateVerifier(storedx);
             storedk = generateMultiplier();
             storedA = generatePublicA(a);
-            storedB = generatePublicB(storedk, storedv);
+            storedB = generatePublicB(storedk, storedv, b);
             storedu = generateScrambling(storedA, storedB);
             storedS = generateSessionSecret(storedA, storedv, storedu, b);
             storedK = generateSessionKey(storedS);
@@ -1386,8 +1504,8 @@ namespace HomeKit_Test
 
         UInt32[] generatePrivateKey(UInt32[] salt, String authString)
         {
-            Byte[] saltBytes = fromUInt32ArrayBE(salt);
-            //salt = byteArrayReverse(salt);
+            Byte[] saltBytes = fromUInt32Array(salt);
+            saltBytes = byteArrayReverse(saltBytes);
             Byte[] authBytes = Encoding.ASCII.GetBytes(authString);
             Byte[] pwHash = genSHA512(authBytes);
             Byte[] toHash = saltBytes.Concat(pwHash).ToArray();
@@ -1421,7 +1539,7 @@ namespace HomeKit_Test
             return returnVal;
         }
 
-        UInt32[] generatePublicB(UInt32[] k, UInt32[] v)
+        UInt32[] generatePublicB(UInt32[] k, UInt32[] v, UInt32[] b)
         {
 
             UInt32[] B = UInt32AddNoSign(UInt32ArrayMulMod(k, v, N), UInt32PowModMonty(g, b, N));
@@ -1470,7 +1588,7 @@ namespace HomeKit_Test
 
             Byte[] hash = byteArrayReverse(genSHA512(toHash));
 
-            return toUInt32ArrayLE(hash);
+            return toUInt32Array(hash);
         }
 
         private void button2_Click(object sender, EventArgs e)
@@ -1687,6 +1805,11 @@ namespace HomeKit_Test
                 //AddToLogBox(i.ToString() + " " + i.ToString("X8") + "\r\n");
                 AddToLogBox(i.ToString("X8") + "\r\n");
             }
+        }
+
+        private void button4_Click(object sender, EventArgs e)
+        {
+
         }
     }
 }

@@ -38,6 +38,8 @@
             this.button2 = new System.Windows.Forms.Button();
             this.button3 = new System.Windows.Forms.Button();
             this.MontyTest = new System.ComponentModel.BackgroundWorker();
+            this.button4 = new System.Windows.Forms.Button();
+            this.label2 = new System.Windows.Forms.Label();
             this.SuspendLayout();
             // 
             // TCPListenerTask
@@ -47,7 +49,7 @@
             // label1
             // 
             this.label1.AutoSize = true;
-            this.label1.Location = new System.Drawing.Point(299, 165);
+            this.label1.Location = new System.Drawing.Point(303, 287);
             this.label1.Name = "label1";
             this.label1.Size = new System.Drawing.Size(51, 20);
             this.label1.TabIndex = 0;
@@ -116,11 +118,32 @@
             // 
             this.MontyTest.DoWork += new System.ComponentModel.DoWorkEventHandler(this.MontyTest_DoWork);
             // 
+            // button4
+            // 
+            this.button4.Location = new System.Drawing.Point(307, 637);
+            this.button4.Name = "button4";
+            this.button4.Size = new System.Drawing.Size(106, 50);
+            this.button4.TabIndex = 7;
+            this.button4.Text = "button4";
+            this.button4.UseVisualStyleBackColor = true;
+            this.button4.Click += new System.EventHandler(this.button4_Click);
+            // 
+            // label2
+            // 
+            this.label2.AutoSize = true;
+            this.label2.Location = new System.Drawing.Point(190, 65);
+            this.label2.Name = "label2";
+            this.label2.Size = new System.Drawing.Size(51, 20);
+            this.label2.TabIndex = 8;
+            this.label2.Text = "label2";
+            // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(9F, 20F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(1710, 831);
+            this.Controls.Add(this.label2);
+            this.Controls.Add(this.button4);
             this.Controls.Add(this.button3);
             this.Controls.Add(this.button2);
             this.Controls.Add(this.Status1);
@@ -148,6 +171,8 @@
         private System.Windows.Forms.Button button2;
         private System.Windows.Forms.Button button3;
         private System.ComponentModel.BackgroundWorker MontyTest;
+        private System.Windows.Forms.Button button4;
+        private System.Windows.Forms.Label label2;
     }
 }
 
