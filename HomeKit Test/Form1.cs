@@ -5,6 +5,9 @@
  * 
  * SHA-512 based on Crhis Veness Java Script SHA-512 implementation (https://www.movable-type.co.uk/scripts/sha512.html)
  * Big integare arithmatic based on answer from: https://stackoverflow.com/questions/2207006/modular-exponentiation-for-high-numbers-in-c by clinux
+ * Modular inverse calculation from https://www.di-mgt.com.au/euclidean.html#code-modinv implementation of KNU298 avoiding negative integers
+ * Chacha20 from https://github.com/sbennett1990/ChaCha20-csharp
+ * 
  */
 
 
@@ -143,7 +146,7 @@ namespace HomeKit_Test
 
             var za = new ServiceProfile("Test HAP", "_hap._tcp", DevicePort);
             za.AddProperty("c#", "12");
-            za.AddProperty("ff", "1");
+            za.AddProperty("ff", "0");
             za.AddProperty("id", "12:13:12:12:12:13");
             za.AddProperty("md", "Ver 1");
             za.AddProperty("sf", "1");
@@ -159,7 +162,7 @@ namespace HomeKit_Test
             A.digits = new uint[] { 0x5 };
 
             A.negative = false;
-            BigInteger bigA = new BigInteger(fromUInt32Array(A.digits).Concat(new Byte[] { 0 }).ToArray());
+            BigInteger bigA = new BigInteger(fromUInt32ArrayLE(A.digits).Concat(new Byte[] { 0 }).ToArray());
 
             B.digits = new uint[] { 0xFFFFF };
             ////b.digits = s.Concat(new UInt32[] {  0x12345678, 0x12345678, 0x12345678, 0x12345678, 0x12345678, 0x12345678, 0x12345678, 0x12345678, 
@@ -178,7 +181,7 @@ namespace HomeKit_Test
 
             B.digits = a;
             B.negative = false;
-            BigInteger bigB = new BigInteger(fromUInt32Array(B.digits).Concat(new Byte[] { 0 }).ToArray());
+            BigInteger bigB = new BigInteger(fromUInt32ArrayLE(B.digits).Concat(new Byte[] { 0 }).ToArray());
 
             mod.digits = new uint[] { 0xFFFFFFFF, 0xFFFFF };
             mod.digits = N;
@@ -198,7 +201,7 @@ namespace HomeKit_Test
 
             //};
             mod.negative = false;
-            BigInteger bigMod = new BigInteger(fromUInt32Array(mod.digits).Concat(new Byte[] { 0 }).ToArray());
+            BigInteger bigMod = new BigInteger(fromUInt32ArrayLE(mod.digits).Concat(new Byte[] { 0 }).ToArray());
 
             int32Array testResult;
             testResult.digits = new UInt32[] { 0 };
@@ -304,9 +307,8 @@ namespace HomeKit_Test
                 int contentLength = 0;
                 string requestType = null;
                 string uri = null;
-                while (client.Connected)
-
-                {
+                Byte curMethod = 0;
+                
 
                     while ((i = stream.Read(received, 0, 1)) != 0)
                     {
@@ -361,7 +363,7 @@ namespace HomeKit_Test
                         if (dataBytesReceived == contentLength && !parsingHeader)
                         {
                             AddToLogBox(dataBytesReceived.ToString() + " Bytes Recevied\r\n");
-                            processHTTP(stream, requestType, uri, bytes, dataBytesReceived);
+                            processHTTP(stream, requestType, uri, bytes, dataBytesReceived, ref curMethod);
                             parsingHeader = true;
                             request = "";
                             dataBytesReceived = 0;
@@ -369,8 +371,9 @@ namespace HomeKit_Test
                         
 
                     }
-                    
-                }
+
+                client.Close();
+                AddToLogBox("Conenction Closed\r\n");
                
             }
 
@@ -378,7 +381,7 @@ namespace HomeKit_Test
 
         }
 
-        void processHTTP(NetworkStream stream, String requestType, String uri, Byte[] bytes, int dataBytesReceived)
+        void processHTTP(NetworkStream stream, String requestType, String uri, Byte[] bytes, int dataBytesReceived, ref Byte curMethod)
         {
             switch (requestType)
             {
@@ -386,7 +389,7 @@ namespace HomeKit_Test
                     switch (uri)
                     {
                         case "/pair-setup":
-
+                       
                             Byte[] TLVState = findTLVKey(bytes, 0x06, dataBytesReceived);
                             if (TLVState == null || TLVState.Length == 0) break;
                             int state = TLVState[0];
@@ -409,7 +412,7 @@ namespace HomeKit_Test
 
                                             storeds = byteGenRandom(16);
 
-                                            storedx = generatePrivateKey(toUInt32ArrayLE(byteArrayReverse(storeds)), userName, DeviceCode);
+                                            storedx = generatePrivateKey(toUInt32Array(storeds), userName, DeviceCode);
                                             storedv = generateVerifier(storedx);
                                             storedk = generateMultiplier();
                                             //storedA = generatePublicA(a);
@@ -420,7 +423,7 @@ namespace HomeKit_Test
                                             Byte[] TLVResponse = new byte[0];
                                             appendTLVBytes(ref TLVResponse, 0x06, new byte[] { 0x02 });
                                             appendTLVBytes(ref TLVResponse, 0x02, storeds);
-                                            appendTLVBytes(ref TLVResponse, 0x03, byteArrayReverse(fromUInt32Array(storedB)));
+                                            appendTLVBytes(ref TLVResponse, 0x03, fromUInt32Array(storedB));
 
                                             sendTLVResponse(stream, TLVResponse);
 
@@ -433,38 +436,92 @@ namespace HomeKit_Test
                                         Byte[] publicA = findTLVKey(bytes, 0x03, dataBytesReceived);
                                         Byte[] proofA = findTLVKey(bytes, 0x04, dataBytesReceived);
 
+                                        UInt32[] publicAUInt32 = toUInt32Array(publicA);
+                                        publicAUInt32 = UInt32ArrayMod(publicAUInt32, N);
+                                        if (UInt32ArrayCmpNoSign(publicAUInt32, new UInt32[] { 0x0 }) == 0)
+                                        {
+                                            AddToLogBox("A mod N == 0\r\n");
+                                            sendAuthError(stream);
+                                            break;
+                                        }
+
                                         storedu = generateScrambling(toUInt32Array(publicA), storedB);
                                         storedS = generateSessionSecret(toUInt32Array(publicA), storedv, storedu, storedb);
                                         storedK = generateSessionKey(storedS);
 
                                         Byte[] hashN = genSHA512(N);
-                                        Byte[] gPad = new byte[hashN.Length];
+                                        Byte[] gPad = new byte[1];
                                         gPad[gPad.Length - 1] = generator;
                                         Byte[] hashG = genSHA512(gPad);
                                         Byte[] NxorG = new Byte[hashN.Length];
                                         for (int i = 0; i < NxorG.Length;i++) NxorG[i]= (byte)(hashN[i] ^ hashG[i]);
                                         Byte[] hashI = genSHA512(userName);
-                                        Byte[] publicB = byteArrayReverse(fromUInt32Array(storedB));
-                                        Byte[] K = byteArrayReverse(fromUInt32Array(storedK));
+                                        Byte[] publicB = fromUInt32Array(storedB);
+                                        Byte[] K = fromUInt32Array(storedK);
 
                                         Byte[] localProofA = genSHA512(NxorG, hashI, storeds, publicA, publicB, K);
 
 
-
-
-
-
-
-                                        AddToLogBox("public A Length: " + publicA.Length.ToString());
+                                    
+                                        AddToLogBox("public A Length: " + publicA.Length.ToString() + "\r\n");
                                         if (proofA == null)
                                         {
                                             AddToLogBox("proof A null");
                                             break;
                                         }
-                                        AddToLogBox("proof A Length: " + proofA.Length.ToString());
+                                        AddToLogBox("proof A Length: " + proofA.Length.ToString() + "\r\n");
+                                        AddToLogBox(byteArrayEqual(proofA, localProofA).ToString() + "\r\n");
+
+                                        if (!byteArrayEqual(proofA, localProofA))                                        
+                                        {
+                                            AddToLogBox("Client Proof Mismatch\r\n");
+                                            sendAuthError(stream);
+                                            break;
+                                        }
+
+                                        byte[] proofB = genSHA512(publicA, proofA, K);
+                                       
+                                        if (checkBox1.Checked) proofB = byteArrayReverse(proofB);
+
+                                        Byte[] TLVResponse = new byte[0];
+                                        appendTLVBytes(ref TLVResponse, 0x06, new byte[] { 0x04 });
+                                        appendTLVBytes(ref TLVResponse, 0x04, proofB);
+                                        sendTLVResponse(stream, TLVResponse);
+
+                                        AddToLogBox("Server Proof Sent\r\n");
 
                                         break;
 
+                                    }
+                                case 5:
+                                    {
+                                        Byte[] encData = findTLVKey(bytes, 0x05, dataBytesReceived);
+                                        Byte[] chachaKey = genHKDFSHA512(fromUInt32Array(storedK), "Pair-Setup-Encrypt-Salt", "Pair-Setup-Encrypt-Info", 32);
+                                        Byte[] nonce = Encoding.UTF8.GetBytes("PS-Msg05");
+                                        UInt32[] prevState = null;
+
+                                        Byte[] subTLV = new byte[encData.Length - 16];
+                                        Byte[] authTag = new byte[16];
+
+                                        for (int i = 0; i < subTLV.Length; i++) subTLV[i] = encData[i];
+                                        for (int i = 0; i < 16; i++) authTag[i] = encData[encData.Length - 16 + i];
+
+                                        Byte[] mac = subTLV;
+                                        if (subTLV.Length % 16 != 0) mac = subTLV.Concat(new Byte[16 - (subTLV.Length % 16)]).ToArray();
+                                        mac = mac.Concat(new Byte[8]).ToArray();
+                                        mac = mac.Concat(fromUInt32ArrayLE(new UInt32[] { (UInt32)subTLV.Length, 0x0 })).ToArray();
+
+
+
+                                        Byte[] poly1305Key = chacha20Block(chachaKey, nonce, 0, ref prevState);
+                                        Byte[] expectedPoly1305 = poly1305(poly1305Key, mac);
+
+                                        if (byteArrayEqual(authTag, expectedPoly1305)) AddToLogBox("M5 decrypt successful\r\n");
+                                        Byte[] resultTest = chacha20(chachaKey, nonce, subTLV, 1);
+
+
+                                        AddToLogBox("Reached Level 5\r\n");
+                                        break;
                                     }
 
                             }
@@ -476,6 +533,24 @@ namespace HomeKit_Test
             }
 
         }
+
+        void sendAuthError(NetworkStream stream)
+        {
+            Byte[] TLVResponse = new byte[0];
+            appendTLVBytes(ref TLVResponse, 0x06, new byte[] { 0x04 });
+            appendTLVBytes(ref TLVResponse, 0x07, new byte[] { 0x02 });
+            sendTLVResponse(stream, TLVResponse);
+        }
+        
+        bool byteArrayEqual(byte[] x, byte[] y)
+        {
+            if (x.Length != y.Length) return false;
+
+            for (int i = 0; i < x.Length; i++) if (x[i] != y[i]) return false;
+
+            return true;
+        }
+        
         void sendTLVResponse(NetworkStream stream, Byte[] responseBytes)
         {
             sendHTTPResponse(stream, "200", "application/pairing+tlv8", responseBytes, responseBytes.Length);
@@ -657,7 +732,7 @@ namespace HomeKit_Test
 
         Byte[] genSHA512(UInt32[] msg)
         {
-            Byte[] toHash = byteArrayReverse(fromUInt32Array(N));
+            Byte[] toHash = fromUInt32Array(N);
   
             return genSHA512(toHash); ;
 
@@ -940,6 +1015,8 @@ namespace HomeKit_Test
             {
                 for (int j = 0; j < 4; j++)
                 {
+                    int curIndex = i * 4 + j;
+                    if (curIndex > byteArray.Length - 1) break;
                     digits[i] |= ((UInt32)byteArray[(i * 4 + j)]) << (8 * j);
 
                 }
@@ -952,7 +1029,7 @@ namespace HomeKit_Test
             return returnVal;
         }
 
-        Byte[] fromUInt32Array(UInt32[] uint32Array)
+        Byte[] fromUInt32ArrayLE(UInt32[] uint32Array)
         {
             Byte[] returnVal = new byte[uint32Array.Length * 4];
 
@@ -966,6 +1043,12 @@ namespace HomeKit_Test
             }
             return returnVal;
         }
+
+        Byte[] fromUInt32Array(UInt32[] uint32Array)
+        {
+            return byteArrayReverse(fromUInt32ArrayLE(uint32Array));
+        }
+
         Byte[] fromUInt32ArrayBE(UInt32[] uint32Array)
         {
             Byte[] returnVal = new byte[uint32Array.Length * 4];
@@ -1504,17 +1587,14 @@ namespace HomeKit_Test
 
         UInt32[] generatePrivateKey(UInt32[] salt, String authString)
         {
-            Byte[] saltBytes = fromUInt32Array(salt);
-            saltBytes = byteArrayReverse(saltBytes);
+            Byte[] saltBytes = fromUInt32Array(salt); 
             Byte[] authBytes = Encoding.ASCII.GetBytes(authString);
             Byte[] pwHash = genSHA512(authBytes);
             Byte[] toHash = saltBytes.Concat(pwHash).ToArray();
 
             Byte[] hashBytes = genSHA512(toHash);
 
-            hashBytes = byteArrayReverse(hashBytes);
-
-            return toUInt32ArrayLE(hashBytes);
+            return toUInt32Array(hashBytes);
         }
 
         UInt32[] generatePrivateKey(UInt32[] salt, String userName, String password)
@@ -1526,15 +1606,14 @@ namespace HomeKit_Test
         UInt32[] generateMultiplier()
         {
             UInt32[] gPad = new uint[N.Length];
-            gPad[gPad.Length - 1] = generator;
-            Byte[] gBytes = fromUInt32ArrayBE(gPad);
+            gPad[0] = generator;
+            Byte[] gBytes = fromUInt32Array(gPad);
 
             Byte[] NBytes = fromUInt32Array(N);
-            NBytes = byteArrayReverse(NBytes);
+          
             Byte[] toHash = NBytes.Concat(gBytes).ToArray();
             byte[] hash = genSHA512(toHash);
-            Byte[] hashRev = byteArrayReverse(hash);
-            UInt32[] returnVal = toUInt32ArrayLE(hashRev);
+            UInt32[] returnVal = toUInt32Array(hash);
 
             return returnVal;
         }
@@ -1550,15 +1629,13 @@ namespace HomeKit_Test
 
         UInt32[] generateScrambling(UInt32[] A, UInt32[] B)
         {
-            Byte[] bytesA = byteArrayReverse(fromUInt32Array(A));
-            Byte[] bytesB = byteArrayReverse(fromUInt32Array(B));
+            Byte[] bytesA = fromUInt32Array(A);
+            Byte[] bytesB = fromUInt32Array(B);
 
             Byte[] toHash = bytesA.Concat(bytesB).ToArray();
             Byte[] hash = genSHA512(toHash);
 
-            Byte[] hashRev = byteArrayReverse(hash);
-
-            UInt32[] u = toUInt32ArrayLE(hashRev);
+            UInt32[] u = toUInt32Array(hash);
             return u;
         }
 
@@ -1584,9 +1661,9 @@ namespace HomeKit_Test
 
         UInt32[] generateSessionKey(UInt32[] S)
         {
-            Byte[] toHash = byteArrayReverse(fromUInt32Array(storedS));
+            Byte[] toHash = fromUInt32Array(storedS);
 
-            Byte[] hash = byteArrayReverse(genSHA512(toHash));
+            Byte[] hash = genSHA512(toHash);
 
             return toUInt32Array(hash);
         }
@@ -1807,8 +1884,259 @@ namespace HomeKit_Test
             }
         }
 
-        private void button4_Click(object sender, EventArgs e)
+        Byte[] genHKDFSHA512(Byte[] IKM, Byte[] salt, Byte[] info, int L)
         {
+            
+
+            Byte[] PRK = genHMACSHA512(salt, IKM); //extract
+
+            //AddToLogBox("PRK:\r\n");
+            //foreach (Byte i in PRK)
+            //{
+            //    AddToLogBox(i.ToString("X2") + "\r\n");
+
+            //}
+
+            int n = (int)Math.Ceiling((decimal)L / PRK.Length);
+
+            Byte[] oldT = new byte[0];
+            Byte[] T = new byte[0];
+
+            for (int i = 1; i < n + 1; i++)
+            {
+                T = genHMACSHA512(PRK, oldT, info, new byte[] { (byte)i });
+                oldT = T;
+            }
+
+            Byte[] returnVal = new byte[L];
+            for (int i = 0; i < L; i++) returnVal[i] = T[i];
+
+            return returnVal;
+        }
+
+        Byte[] genHKDFSHA512(Byte[] IKM, String salt, String info, int L)
+        {
+            Byte[] saltBytes = Encoding.UTF8.GetBytes(salt);
+            Byte[] infoBytes = Encoding.UTF8.GetBytes(info);
+
+            return genHKDFSHA512(IKM, saltBytes, infoBytes, L);
+
+        }
+
+            private void button4_Click(object sender, EventArgs e)
+        {
+            //Byte[] IKM = new byte[] { 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b };
+            //Byte[] salt = new byte[] { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c };
+            //Byte[] info = new byte[] { 0xf0, 0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xf9 };
+
+
+            //Byte[] testResult = genHKDFSHA512(IKM, salt, info, 42);
+
+
+            //UInt32[] testVector = new UInt32[] { 0x11111111, 0x01020304, 0x9b8d6f43, 0x01234567 };
+
+            //chacha20Quarter(ref testVector[0], ref testVector[1], ref testVector[2], ref testVector[3]);
+
+            
+            byte[] testKey = new byte[] {   0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+                                            0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f};
+            byte[] testNonce = new byte[] { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x4a, 0x00, 0x00, 0x00, 0x00 };
+            testKey = new byte[] {          0x80, 0x81, 0x82, 0x83, 0x84, 0x85, 0x86, 0x87, 0x88, 0x89, 0x8a, 0x8b, 0x8c, 0x8d, 0x8e, 0x8f,
+                                            0x90, 0x91, 0x92, 0x93, 0x94, 0x95, 0x96, 0x97, 0x98, 0x99, 0x9a, 0x9b, 0x9c, 0x9d, 0x9e, 0x9f};
+            testNonce = new byte[] {        0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08 };
+
+            //  testKey = new byte[] {          0x85, 0xd6, 0xbe, 0x78, 0x57, 0x55, 0x6d, 0x33, 0x7f, 0x44, 0x52, 0xfe, 0x42, 0xd5, 0x06, 0xa8,
+            //                            0x01, 0x03, 0x80, 0x8a, 0xfb, 0x0d, 0xb2, 0xfd, 0x4a, 0xbf, 0xf6, 0xaf, 0x41, 0x49, 0xf5, 0x1b};
+
+            testKey = new byte[] {  0x1c, 0x92, 0x40, 0xa5, 0xeb, 0x55, 0xd3, 0x8a, 0xf3, 0x33, 0x88, 0x86, 0x04, 0xf6, 0xb5, 0xf0,
+                                    0x47, 0x39, 0x17, 0xc1, 0x40, 0x2b, 0x80, 0x09, 0x9d, 0xca, 0x5c, 0xbc, 0x20, 0x70, 0x75, 0xc0};
+
+            UInt32[] prevState = null;
+
+            Byte[] testBytes = Encoding.UTF8.GetBytes("Ladies and Gentlemen of the class of '99: If I could offer you only one tip for the future, sunscreen would be it.");
+            testBytes = Encoding.UTF8.GetBytes("Cryptographic Forum Research Group");
+
+            //Byte[] testResult = chacha20(testKey, testNonce, testBytes, 1);
+            //Byte[] testResult = poly1305(testKey, testBytes);
+            Byte[] testResult = chacha20Block(testKey, testNonce, 0, ref prevState);
+            //AddToLogBox("OKM:\r\n");
+            foreach (UInt32 i in testResult)
+            {
+                AddToLogBox(i.ToString("X8") + "\r\n");
+
+            }
+            //AddToLogBox(Encoding.UTF8.GetString(testResult) + "\r\n");
+
+            //testResult = chacha20(testKey, testNonce, testResult, 1);
+
+            //AddToLogBox(Encoding.UTF8.GetString(testResult) + "\r\n");
+
+        }
+
+        Byte[] genHMACSHA512(Byte[] K, params Byte[][] list)
+        {
+
+            const Byte B = 128;
+            const Byte L = 64;
+
+            if (K.Length > B) K = genSHA512(K);
+
+            {
+                Byte[] KPad = new byte[B];
+                for (int i = 0; i < K.Length; i++) KPad[i] = K[i];
+                K = KPad;
+            }
+
+
+            Byte[] toHash = new byte[0];
+
+            foreach (Byte[] i in list)
+            {
+                toHash = toHash.Concat(i).ToArray();
+            }
+
+            Byte[] K_ipad = new byte[B], K_opad = new byte[B];
+            for (int i = 0; i < B; i++) K_ipad[i] = (byte)(K[i] ^ 0x36);
+            for (int i = 0; i < B; i++) K_opad[i] = (byte)(K[i] ^ 0x5c);
+
+            return genSHA512(K_opad, genSHA512(K_ipad, toHash));
+
+
+        }
+
+        Byte[] chacha20Block(Byte[] key, Byte[] nonce_in, UInt32 count, ref UInt32[] state_in)
+        {
+
+            UInt32[] state = new uint[16];
+            if (state_in == null)
+            {
+                state_in = new uint[16];
+                Byte[] nonce = new Byte[12];
+                for (int i = 0; i < nonce_in.Length; i++)
+                {
+                    nonce[nonce.Length - i - 1] = nonce_in[nonce_in.Length - i - 1];
+                }
+
+                state_in[0] = 0x61707865;
+                state_in[1] = 0x3320646e;
+                state_in[2] = 0x79622d32;
+                state_in[3] = 0x6b206574;
+
+                UInt32[] keyUInt32 = toUInt32ArrayLE(key);
+                for (int i = 0; i < keyUInt32.Length; i++) state_in[i + 4] = keyUInt32[i];
+
+
+
+                UInt32[] nonceUInt32 = toUInt32ArrayLE(nonce);
+                for (int i = 0; i < nonceUInt32.Length; i++) state_in[i + 13] = nonceUInt32[i];
+            }
+            
+            state_in[12] = count;
+            for (int i = 0; i < state.Length; i++) state[i] = state_in[i];
+           
+
+            for (int i = 0; i < 10; i++)
+            {
+                chacha20Quarter(ref state[0], ref state[4], ref state[8], ref state[12]);
+                chacha20Quarter(ref state[1], ref state[5], ref state[9], ref state[13]);
+                chacha20Quarter(ref state[2], ref state[6], ref state[10], ref state[14]);
+                chacha20Quarter(ref state[3], ref state[7], ref state[11], ref state[15]);
+                chacha20Quarter(ref state[0], ref state[5], ref state[10], ref state[15]);
+                chacha20Quarter(ref state[1], ref state[6], ref state[11], ref state[12]);
+                chacha20Quarter(ref state[2], ref state[7], ref state[8], ref state[13]);
+                chacha20Quarter(ref state[3], ref state[4], ref state[9], ref state[14]);
+            }
+
+            for (int i = 0; i < state.Length; i++) state[i] += state_in[i];
+
+            return fromUInt32ArrayLE(state);
+
+        }
+
+        void rol(ref UInt32 x, int n)
+        {
+            x = (x << n | x >> (32 - n));
+        }
+
+        void chacha20Quarter (ref UInt32 a, ref UInt32 b, ref UInt32 c, ref UInt32 d)
+        {
+            a += b; d ^= a; rol(ref d, 16);
+            c += d; b ^= c; rol(ref b, 12);
+            a += b; d ^= a; rol(ref d, 8);
+            c += d; b ^= c; rol(ref b, 7); 
+        }
+
+        Byte[] chacha20 (Byte[] key, Byte[] nonce, Byte[] plainText, UInt32 initialCounter)
+        {
+            Byte[] returnVal = new byte[plainText.Length];
+            UInt32 nBlocks = (UInt32)Math.Ceiling((decimal)plainText.Length / 64);
+            UInt32[] prevState = null;
+            for (UInt32 i = 0; i<nBlocks; i++)
+            {
+                Byte[] curBlock = chacha20Block(key, nonce, i + initialCounter, ref prevState);
+                UInt32 curStart = i * 64;
+                Byte blockLen = (i != nBlocks - 1) ? (byte)64 : (byte)(plainText.Length - curStart);
+                for (UInt32 j = 0; j<blockLen;j++)
+                {
+                    returnVal[curStart + j] = (byte)(plainText[curStart + j] ^ curBlock[j]);
+                }
+            }
+
+            return returnVal;
+
+
+        }
+
+        Byte[] poly1305 (Byte[] key, Byte[] msg)
+        {
+
+            Byte[] rBytes = new byte[16];
+            Byte[] sBytes = new byte[16];
+
+            for (int i = 0; i < rBytes.Length; i++) rBytes[i] = key[i];
+            for (int i = 0; i < sBytes.Length; i++) sBytes[i] = key[i+16];
+
+            UInt32[] p = new UInt32[] { 0x3, 0xffffffff, 0xffffffff, 0xffffffff, 0xfffffffb };
+            p = UInt32ArrayReverse(p);
+
+            UInt32[] A = new uint[] { 0 };
+
+            rBytes[3] &= 15;
+            rBytes[7] &= 15;
+            rBytes[11] &= 15;
+            rBytes[15] &= 15;
+            rBytes[4] &= 252;
+            rBytes[8] &= 252;
+            rBytes[12] &= 252;
+            
+            UInt32[] r = toUInt32ArrayLE(rBytes);
+            UInt32[] s = toUInt32ArrayLE(sBytes);
+
+            UInt32 nBlocks = (UInt32)Math.Ceiling((decimal)msg.Length / 16);
+
+            for (UInt32 i = 0; i< nBlocks; i++)
+            {
+                
+                UInt32 curStart = i * 16;
+                Byte blockLen = (i != nBlocks - 1) ? (byte)16 : (byte)(msg.Length - curStart);
+                Byte[] curBlock = new byte[blockLen + 1];
+                
+                for (int j = 0; j < blockLen; j++) curBlock[j] = msg[curStart + j]; //separate out current block
+                curBlock[blockLen] = 0x01;
+                UInt32[] curBlockUInt32 = toUInt32ArrayLE(curBlock);
+
+                A = UInt32AddNoSign(A, curBlockUInt32);
+                A = UInt32ArrayMulMod(A, r, p);
+            }
+
+            A = UInt32AddNoSign(A, s);
+            Byte[] A_Bytes = fromUInt32ArrayLE(A);
+
+            Byte[] returnVal = new byte[16];
+            for (int i = 0; i < 16; i++) returnVal[i] = A_Bytes[i];
+
+            return returnVal;
+
 
         }
     }
