@@ -274,13 +274,13 @@ namespace HomeKit_Test
 
             //testResult.digits = UInt32ArrayMulNoSign(temp, temp1);
 
-            foreach (UInt32 i in signature)
-            {
-                //AddToLogBox(i.ToString() + " " + i.ToString("X8") + "\r\n");
-                AddToLogBox(i.ToString("x2"));
-            }
-            AddToLogBox("\r\n");
-            AddToLogBox(result.ToString() + "\r\n");
+            //foreach (UInt32 i in signature)
+            //{
+            //    //AddToLogBox(i.ToString() + " " + i.ToString("X8") + "\r\n");
+            //    AddToLogBox(i.ToString("x2"));
+            //}
+            //AddToLogBox("\r\n");
+            //AddToLogBox(result.ToString() + "\r\n");
 
 
             //Byte[] byteTest = new byte[] { 0x69, 0x69 };
@@ -561,11 +561,15 @@ namespace HomeKit_Test
                                         Byte[] deviceLTPK = findTLVKey(subTLV, 0x03, subTLV.Length);
                                         Byte[] deviceSignature = findTLVKey(subTLV, 0x0a, subTLV.Length);
 
-                                        Byte[] deviceX = genHKDFSHA512(fromUInt32Array(storedK), "Pair-Controller-Sign-Salt", "Pair-Controller-Sign-Info", 32);
+                                        Byte[] deviceX = genHKDFSHA512(fromUInt32Array(storedK), "Pair-Setup-Controller-Sign-Salt", "Pair-Setup-Controller-Sign-Info", 32);
                                         Byte[] deviceInfo = deviceX.Concat(devicePairingID).Concat(deviceLTPK).ToArray();
 
-
                                         AddToLogBox(Encoding.UTF8.GetString(devicePairingID) + "\r\n");
+                                        
+                                        bool result = ed25519verify(deviceLTPK, deviceInfo, deviceSignature);
+                                        AddToLogBox(result.ToString() + "\r\n");
+
+                                        
                                         AddToLogBox("Reached Level 5\r\n");
                                         break;
                                     }
