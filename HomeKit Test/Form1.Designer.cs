@@ -50,7 +50,7 @@
             // label1
             // 
             this.label1.AutoSize = true;
-            this.label1.Location = new System.Drawing.Point(303, 287);
+            this.label1.Location = new System.Drawing.Point(36, 486);
             this.label1.Name = "label1";
             this.label1.Size = new System.Drawing.Size(51, 20);
             this.label1.TabIndex = 0;
@@ -58,11 +58,11 @@
             // 
             // textBox1
             // 
-            this.textBox1.Location = new System.Drawing.Point(630, 65);
+            this.textBox1.Location = new System.Drawing.Point(104, 65);
             this.textBox1.Multiline = true;
             this.textBox1.Name = "textBox1";
             this.textBox1.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
-            this.textBox1.Size = new System.Drawing.Size(766, 387);
+            this.textBox1.Size = new System.Drawing.Size(1578, 387);
             this.textBox1.TabIndex = 1;
             // 
             // textBox2
@@ -85,7 +85,7 @@
             // Status1
             // 
             this.Status1.AutoSize = true;
-            this.Status1.Location = new System.Drawing.Point(303, 472);
+            this.Status1.Location = new System.Drawing.Point(36, 529);
             this.Status1.Name = "Status1";
             this.Status1.Size = new System.Drawing.Size(51, 20);
             this.Status1.TabIndex = 4;
@@ -132,7 +132,7 @@
             // label2
             // 
             this.label2.AutoSize = true;
-            this.label2.Location = new System.Drawing.Point(190, 65);
+            this.label2.Location = new System.Drawing.Point(36, 36);
             this.label2.Name = "label2";
             this.label2.Size = new System.Drawing.Size(51, 20);
             this.label2.TabIndex = 8;

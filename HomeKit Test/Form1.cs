@@ -7,6 +7,7 @@
  * Big integare arithmatic based on answer from: https://stackoverflow.com/questions/2207006/modular-exponentiation-for-high-numbers-in-c by clinux
  * Modular inverse calculation from https://www.di-mgt.com.au/euclidean.html#code-modinv implementation of KNU298 avoiding negative integers
  * Chacha20 from https://github.com/sbennett1990/ChaCha20-csharp
+ * ed25519 primarily from RFC 8032, https://github.com/hanswolff/ed25519 used for guidance
  * 
  */
 
@@ -31,6 +32,8 @@ using Makaretu.Dns;
 using System.Numerics;
 using System.Security.Policy;
 using System.Runtime.Remoting.Messaging;
+using System.Security.Cryptography;
+using System.Net.Configuration;
 
 namespace HomeKit_Test
 {
@@ -157,6 +160,8 @@ namespace HomeKit_Test
             mdns.Start();
             TCPListenerTask.RunWorkerAsync();
 
+            init_ed25519();
+
             int32Array A, B, mod;
             A.digits = new uint[] { 0x06, 0xFFFFFFFF, 0xFFFF };
             A.digits = new uint[] { 0x5 };
@@ -227,25 +232,62 @@ namespace HomeKit_Test
             //UInt32[] m_inv = UInt32ArrayGetInverse(m, ba);
             //UInt32[] m_prime = UInt32ArraySubSimple(ba, m_inv);
             //UInt32ArrayShrink(ref m_prime);
-           
-            UInt32[] temp = new uint[] { 0xffffffff, 0xf};
+
+            UInt32[] temp = new uint[] { 0xffffffff, 0xf };
             UInt32[] temp1 = new uint[] { 0xfffffff };
+
+            Byte[] secret = new byte[] {0x9d, 0x61, 0xb1, 0x9d, 0xef, 0xfd, 0x5a, 0x60, 0xba, 0x84, 0x4a, 0xf4, 0x92, 0xec, 0x2c, 0xc4,
+                                        0x44, 0x49, 0xc5, 0x69, 0x7b, 0x32, 0x69, 0x19, 0x70, 0x3b, 0xac, 0x03, 0x1c, 0xae, 0x7f, 0x60};
+
+            secret = new byte[] {0x4c, 0xcd, 0x08, 0x9b, 0x28, 0xff, 0x96, 0xda, 0x9d, 0xb6, 0xc3, 0x46, 0xec, 0x11, 0x4e, 0x0f,
+                                        0x5b, 0x8a, 0x31, 0x9f, 0x35, 0xab, 0xa6, 0x24, 0xda, 0x8c, 0xf6, 0xed, 0x4f, 0xb8, 0xa6, 0xfb};
+
+            Byte[] msg = new byte[0];
+
+            msg = new byte[] { 0x72 };
+
+            Byte[] publicKey = ed25519PublicKey(secret);
+
+            Byte[] signature = ed25519sign(secret, msg);
+
+            //signature[22] = 0x69;
+
+            //msg = new byte[] { 0x71 };
+
+            //publicKey[12] = 0x24;
+
+
+            bool result = ed25519verify(publicKey, msg, signature);
+
+            //addBigIntToLogBox(ed25519G.X);
+            //addBigIntToLogBox(ed25519G.Y);
+            //addBigIntToLogBox(ed25519G.Z);
+            //addBigIntToLogBox(ed25519G.T);
+
+
+            //UInt32[] inv = ed25519modInv(new uint[] { 0x1db42 });
+            //UInt32[] d = UInt32ArrayMulNoSign(new uint[] { 0x1db41 }, inv);
+            //d = UInt32ArrayMod(d, ed25519p);
+            //d = UInt32ArraySubSimple(ed25519p, d);
 
             //UInt32ArraySHRWords(ref temp, 25);
 
             //testResult.digits = UInt32ArrayMulNoSign(temp, temp1);
 
-            //foreach (UInt32 i in testResult.digits)
-            //{
-            //    //AddToLogBox(i.ToString() + " " + i.ToString("X8") + "\r\n");
-            //    AddToLogBox(i.ToString("X8") + "\r\n");
-            //}
+            foreach (UInt32 i in signature)
+            {
+                //AddToLogBox(i.ToString() + " " + i.ToString("X8") + "\r\n");
+                AddToLogBox(i.ToString("x2"));
+            }
+            AddToLogBox("\r\n");
+            AddToLogBox(result.ToString() + "\r\n");
+
 
             //Byte[] byteTest = new byte[] { 0x69, 0x69 };
-            
+
 
             //appendTLVBytes(ref byteTest, 0x12, Enumerable.Repeat((Byte)0x61,300).ToArray());
-            
+
             //foreach (Byte i in byteTest)
             //{
             //    //AddToLogBox(i.ToString() + " " + i.ToString("X8") + "\r\n");
@@ -441,7 +483,7 @@ namespace HomeKit_Test
                                         if (UInt32ArrayCmpNoSign(publicAUInt32, new UInt32[] { 0x0 }) == 0)
                                         {
                                             AddToLogBox("A mod N == 0\r\n");
-                                            sendAuthError(stream);
+                                            sendPairingError(stream, 0x04, 0x02);
                                             break;
                                         }
 
@@ -475,7 +517,7 @@ namespace HomeKit_Test
                                         if (!byteArrayEqual(proofA, localProofA))                                        
                                         {
                                             AddToLogBox("Client Proof Mismatch\r\n");
-                                            sendAuthError(stream);
+                                            sendPairingError(stream, 0x04, 0x02);
                                             break;
                                         }
 
@@ -498,28 +540,32 @@ namespace HomeKit_Test
                                         Byte[] encData = findTLVKey(bytes, 0x05, dataBytesReceived);
                                         Byte[] chachaKey = genHKDFSHA512(fromUInt32Array(storedK), "Pair-Setup-Encrypt-Salt", "Pair-Setup-Encrypt-Info", 32);
                                         Byte[] nonce = Encoding.UTF8.GetBytes("PS-Msg05");
-                                        UInt32[] prevState = null;
-
+                                        
                                         Byte[] subTLV = new byte[encData.Length - 16];
                                         Byte[] authTag = new byte[16];
 
                                         for (int i = 0; i < subTLV.Length; i++) subTLV[i] = encData[i];
                                         for (int i = 0; i < 16; i++) authTag[i] = encData[encData.Length - 16 + i];
 
-                                        Byte[] mac = subTLV;
-                                        if (subTLV.Length % 16 != 0) mac = subTLV.Concat(new Byte[16 - (subTLV.Length % 16)]).ToArray();
-                                        mac = mac.Concat(new Byte[8]).ToArray();
-                                        mac = mac.Concat(fromUInt32ArrayLE(new UInt32[] { (UInt32)subTLV.Length, 0x0 })).ToArray();
+                                        if (verifyAuthTag(subTLV, authTag, chachaKey, nonce)) AddToLogBox("M5 decrypt successful\r\n");
+                                        else
+                                        {
+                                            sendPairingError(stream, 0x06, 0x02);
+                                            AddToLogBox("M5 Auth Tag Fail\r\n");
+                                            break;
+                                        }
+                                       
+                                        subTLV = chacha20(chachaKey, nonce, subTLV, 1);
+
+                                        Byte[] devicePairingID = findTLVKey(subTLV, 0x01, subTLV.Length);
+                                        Byte[] deviceLTPK = findTLVKey(subTLV, 0x03, subTLV.Length);
+                                        Byte[] deviceSignature = findTLVKey(subTLV, 0x0a, subTLV.Length);
+
+                                        Byte[] deviceX = genHKDFSHA512(fromUInt32Array(storedK), "Pair-Controller-Sign-Salt", "Pair-Controller-Sign-Info", 32);
+                                        Byte[] deviceInfo = deviceX.Concat(devicePairingID).Concat(deviceLTPK).ToArray();
 
 
-
-                                        Byte[] poly1305Key = chacha20Block(chachaKey, nonce, 0, ref prevState);
-                                        Byte[] expectedPoly1305 = poly1305(poly1305Key, mac);
-
-                                        if (byteArrayEqual(authTag, expectedPoly1305)) AddToLogBox("M5 decrypt successful\r\n");
-                                        Byte[] resultTest = chacha20(chachaKey, nonce, subTLV, 1);
-
-
+                                        AddToLogBox(Encoding.UTF8.GetString(devicePairingID) + "\r\n");
                                         AddToLogBox("Reached Level 5\r\n");
                                         break;
                                     }
@@ -534,7 +580,19 @@ namespace HomeKit_Test
 
         }
 
-        void sendAuthError(NetworkStream stream)
+        bool verifyAuthTag(Byte[] msg, Byte[] authTag, Byte[] key, Byte[] nonce)
+        {
+            Byte[] mac = msg;
+            if (msg.Length % 16 != 0) mac = msg.Concat(new Byte[16 - (msg.Length % 16)]).ToArray();
+            mac = mac.Concat(new Byte[8]).ToArray();
+            mac = mac.Concat(fromUInt32ArrayLE(new UInt32[] { (UInt32)msg.Length, 0x0 })).ToArray();
+
+            Byte[] poly1305Key = chacha20Block(key, nonce, 0);
+            Byte[] expectedPoly1305 = poly1305(poly1305Key, mac);
+
+            return byteArrayEqual(authTag, expectedPoly1305);
+        }
+        void sendPairingError(NetworkStream stream, Byte state, Byte errorCode)
         {
             Byte[] TLVResponse = new byte[0];
             appendTLVBytes(ref TLVResponse, 0x06, new byte[] { 0x04 });
@@ -1377,20 +1435,29 @@ namespace HomeKit_Test
             return a;
 
         }
-
+        UInt32[] UInt32ArraySHR(UInt32[] a, int n)
+        {
+                       
+            for (int i = 0; i < n; i++)
+            {
+                a = UInt32ArraySHR(a);
+            }
+            return a;
+        }
         UInt32[] UInt32ArraySHR(UInt32[] a)
         {
+            UInt32[] b = new uint[a.Length];
             int n = a.Length;
             for (int i = 0; i < n; i++)
             {
-                a[i] = a[i] >> 1;
+                b[i] = a[i] >> 1;
                 if (i != n - 1)
                 {
-                    a[i] |= a[i + 1] << 31;
+                    b[i] |= a[i + 1] << 31;
                 }
             }
 
-            return a;
+            return b;
 
         }
 
@@ -1833,6 +1900,8 @@ namespace HomeKit_Test
         UInt32[] UInt32PowModMonty(UInt32[] x, UInt32[] e, UInt32[] m)
         {
 
+            if (UInt32ArrayCmpNoSign(x, m) != -1) x = UInt32ArrayMod(x, m);
+
             updateStatusLbl("Started");
             UInt32[] R = new UInt32[m.Length + 1];
             R[m.Length] = 0x1;
@@ -2004,6 +2073,12 @@ namespace HomeKit_Test
 
         }
 
+        Byte[] chacha20Block(Byte[] key, Byte[] nonce_in, UInt32 count)
+        {
+            UInt32[] prevState = null;
+            return chacha20Block(key, nonce_in, count, ref prevState);
+        }
+
         Byte[] chacha20Block(Byte[] key, Byte[] nonce_in, UInt32 count, ref UInt32[] state_in)
         {
 
@@ -2087,6 +2162,8 @@ namespace HomeKit_Test
 
         }
 
+       
+
         Byte[] poly1305 (Byte[] key, Byte[] msg)
         {
 
@@ -2137,6 +2214,473 @@ namespace HomeKit_Test
 
             return returnVal;
 
+
+        }
+
+        const int ed25519BitLength = 256;
+
+        UInt32[] ed25519Bx = new UInt32[] { 0x216936d3, 0xcd6e53fe, 0xc0a4e231, 0xfdd6dc5c, 0x692cc760, 0x9525a7b2, 0xc9562d60, 0x8f25d51a };
+        UInt32[] ed25519By = new UInt32[] { 0x66666666, 0x66666666, 0x66666666, 0x66666666, 0x66666666, 0x66666666, 0x66666666, 0x66666658 };
+        UInt32[] ed25519d = new UInt32[] {  0x52036cee, 0x2b6ffe73, 0x8cc74079, 0x7779e898, 0x00700a4d, 0x4141d8ab, 0x75eb4dca, 0x135978a3 };
+        UInt32[] ed25519i = new UInt32[] {  0x2b832480, 0x4fc1df0b, 0x2b4d0099, 0x3dfbd7a7, 0x2f431806, 0xad2fe478, 0xc4ee1b27, 0x4a0ea0b0 };
+        UInt32[] ed25519L = new uint[] {    0x10000000, 0x00000000, 0x00000000, 0x00000000, 0x14def9de, 0xa2f79cd6, 0x5812631a, 0x5cf5d3ed };
+        pointUInt32 ed25519B;
+        pointExtUInt32 ed25519G;
+        UInt32[] ed25519p;
+
+        void init_ed25519()
+        {
+            ed25519p = new UInt32[] { 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x80000000 };
+            ed25519p = UInt32ArraySubSimple(ed25519p, new UInt32[] { 19 });
+
+            ed25519B.x = UInt32ArrayReverse(ed25519Bx);
+            ed25519B.y = UInt32ArrayReverse(ed25519By);
+            ed25519d = UInt32ArrayReverse(ed25519d);
+            ed25519i = UInt32ArrayReverse(ed25519i);
+            ed25519L = UInt32ArrayReverse(ed25519L);
+
+            ed25519G.X.negative = false; ed25519G.Y.negative = false; ed25519G.Z.negative = false; ed25519G.T.negative = false; 
+
+            ed25519G.Y.digits = UInt32ArrayMulMod(new UInt32[] { 0x4 }, ed25519modInv(new UInt32[] { 0x5 }), ed25519p);
+            ed25519G.X.digits = ed25519recover_x(ed25519G.Y.digits, 0);
+            ed25519G.Z.digits = new uint[] { 0x1 };
+            ed25519G.T = int32ArrayMulMod(ed25519G.X, ed25519G.Y, ed25519p);
+
+            //addBigIntToLogBox(ed25519G.X);
+
+
+
+            
+        }
+
+        Byte[] ed25519sign(Byte[] secret, Byte[] msg)
+        {
+            Byte[] prefix;
+            UInt32[] a;
+            Byte[] A = ed25519PublicKey(secret, out prefix, out a);
+            UInt32[] r = ed25519sha512modL(prefix, msg);
+            pointExtUInt32 R = ed25519ScalarMul(r, ed25519G);
+            Byte[] Rs = ed25519compress(R);
+            UInt32[] h = ed25519sha512modL(Rs, A, msg);
+            UInt32[] s = UInt32ArrayMod(UInt32AddNoSign(r, UInt32ArrayMulNoSign(h, a)), ed25519L);
+
+            Byte[] sBytes = fromUInt32ArrayLE(s);
+            Byte[] signature = new Byte[64];
+
+            for (int i = 0; i < 32; i++) signature[i] = Rs[i];
+            for (int i = 0; i < 32; i++) signature[i + 32] = sBytes[i];
+
+            return signature;
+
+        }
+
+        bool ed25519verify(Byte[] publicKey, Byte[] msg, Byte[] signature)
+        {
+            pointExtUInt32 A = ed25519decompress(publicKey);
+            Byte[] Rs = new byte[32];
+            for (int i = 0; i < 32; i++) Rs[i] = signature[i];
+            pointExtUInt32 R = ed25519decompress(Rs);
+
+            Byte[] sBytes = new byte[32];
+            for (int i = 0; i < 32; i++) sBytes[i] = signature[i + 32];
+            UInt32[] s = toUInt32ArrayLE(sBytes);
+            
+            UInt32[] h = ed25519sha512modL(Rs, publicKey, msg);
+
+            pointExtUInt32 sB = ed25519ScalarMul(s, ed25519G);
+            pointExtUInt32 hA = ed25519ScalarMul(h, A);
+
+            return ed25519pointEqual(sB, ed25519pointAdd(R, hA));
+
+
+        }
+
+        bool ed25519pointEqual(pointExtUInt32 P, pointExtUInt32 Q)
+        {
+            int32Array result;
+            
+            result = int32ArraySub(int32ArrayMul(P.X, Q.Z), int32ArrayMul(Q.X, P.Z));
+            result = int32ArrayMod(result, ed25519p);
+            if (!UInt32ArrayIsZero(result.digits)) return false;
+
+            result = int32ArraySub(int32ArrayMul(P.Y, Q.Z), int32ArrayMul(Q.Y, P.Z));
+            result = int32ArrayMod(result, ed25519p);
+            if (!UInt32ArrayIsZero(result.digits)) return false;
+
+            return true;
+        }
+
+        UInt32[] ed25519sha512modL(params Byte[][] list)
+        {
+            Byte[] hashBytes = genSHA512(list);
+            UInt32[] hash = toUInt32ArrayLE(hashBytes);
+            UInt32[] hashMod = UInt32ArrayMod(hash, ed25519L);
+
+            return hashMod;
+            
+
+        }
+
+
+        UInt32[] ed25519recover_x(UInt32[] y, int sign)
+        {
+            UInt32[] y2 = UInt32ArrayMulNoSign(y, y);
+
+            UInt32[] dy2p1 = UInt32AddNoSign(UInt32ArrayMulNoSign(ed25519d, y2), new uint[] { 0x1 });
+            UInt32[] invy2 = ed25519modInv(dy2p1);
+
+            UInt32[] y2m1 = UInt32ArraySubSimple(y2, new uint[] { 0x01 });
+            UInt32[] x2 = UInt32ArrayMulNoSign(y2m1, invy2);
+            if (UInt32ArrayIsZero(x2)) return new uint[] { 0x0 };
+
+            UInt32[] pPlus3 = UInt32AddNoSign(ed25519p, new UInt32[] { 0x03 });
+            UInt32[] x = UInt32PowModMonty(x2, UInt32ArraySHR(pPlus3, 3), ed25519p);
+
+            UInt32[] xTest = UInt32ArraySubMod(UInt32ArrayMulNoSign(x, x), x2, ed25519p);
+            if (!UInt32ArrayIsZero(xTest)) x = UInt32ArrayMulMod(x, ed25519i, ed25519p);
+
+            if ((x[0] & 1) != sign) x = UInt32ArraySubSimple(ed25519p, x);
+
+            return x;
+
+        }
+
+
+        UInt32[] ed25519modInv(UInt32[] x)
+        {
+            //if (UInt32ArrayCmpNoSign(x, ed25519p) != -1) x = UInt32ArrayMod(x, ed25519p);
+            return UInt32PowModMonty(x, UInt32ArraySubSimple(ed25519p, new UInt32[] { 0x2 }), ed25519p);
+        }
+
+        struct pointUInt32
+        {
+            public UInt32[] x;
+            public UInt32[] y;
+        }
+
+        struct pointExtUInt32
+        {
+            public int32Array X;
+            public int32Array Y;
+            public int32Array Z;
+            public int32Array T;
+        }
+
+        Byte[] ed25519PublicKey(byte[] signingKey)
+        {
+            Byte[] temp;
+            UInt32[] temp2;
+            return ed25519PublicKey(signingKey, out temp, out temp2);
+        }
+
+
+        Byte[] ed25519PublicKey(byte[] signingKey, out Byte[] prefix, out UInt32[] a)
+        {
+            Byte[] h = genSHA512(signingKey);
+            Byte[] aBytes = new Byte[ed25519BitLength / 8];
+            for (int i = 0; i < aBytes.Length; i++) aBytes[i] = h[i];
+            aBytes[0] &= 0xF8;
+            aBytes[31] &= 0x7F;
+            aBytes[31] |= 0x40;
+
+            a = toUInt32ArrayLE(aBytes);
+
+            pointExtUInt32 bigA = ed25519ScalarMul(a, ed25519G);
+
+            prefix = new byte[32];
+            for (int i = 0; i < prefix.Length; i++) prefix[i] = h[i + 32];
+
+            return ed25519compress(bigA);
+
+        }
+
+        Byte[] ed25519compress(pointExtUInt32 P)
+        {
+
+            int32Array zinv;
+            zinv.digits = ed25519modInv(int32ArrayMod(P.Z, ed25519p).digits);
+            zinv.negative = false;
+
+            UInt32[] x = int32ArrayMulMod(P.X, zinv, ed25519p).digits;
+            UInt32[] y = int32ArrayMulMod(P.Y, zinv, ed25519p).digits;
+
+            y[7] |= x[0] << 31;
+
+            UInt32[] short_y = new UInt32[8];
+            for (int i = 0; i < 8; i++) short_y[i] = y[i];
+
+            return fromUInt32ArrayLE(short_y);
+
+        }
+
+        pointExtUInt32 ed25519decompress(Byte[] s)
+        {
+            UInt32[] y = toUInt32ArrayLE(s);
+            int sign = (int)(y[7] >> 31);
+            y[7] &= 0x7fffffff;
+            UInt32[] x = ed25519recover_x(y, sign);
+
+            pointExtUInt32 returnVal;
+            returnVal.X.negative = false; returnVal.Y.negative = false; returnVal.Z.negative = false; returnVal.T.negative = false;
+
+            returnVal.X.digits = x;
+            returnVal.Y.digits = y;
+            returnVal.Z.digits = new uint[] { 0x1 };
+            returnVal.T.digits = UInt32ArrayMulMod(x, y, ed25519p);
+
+            return returnVal;
+
+        }
+
+        pointExtUInt32 ed25519ScalarMul(UInt32[] s_in, pointExtUInt32 P)
+        {
+
+            UInt32[] s = new UInt32[s_in.Length];
+            for (int i = 0; i < s.Length; i++) s[i] = s_in[i];
+
+            pointExtUInt32 Q;
+            Q.X.digits = new uint[] { 0x0 }; Q.Y.digits = new uint[] { 0x1 }; Q.Z.digits = new uint[] { 0x1 }; Q.T.digits = new uint[] { 0x0 };
+            Q.X.negative = false; Q.Y.negative = false; Q.Z.negative = false; Q.T.negative = false;
+
+            while (!UInt32ArrayIsZero(s))
+            {
+                
+                if ((s[0] & 0x1) == 1) Q = ed25519pointAdd(Q, P);
+                P = ed25519pointAdd(P, P);
+                s = UInt32ArraySHR(s);
+            }
+
+            return Q;
+
+        }
+
+        pointExtUInt32 ed25519pointAdd(pointExtUInt32 P, pointExtUInt32 Q)
+        {
+            int32Array d;
+            d.digits = ed25519d;
+            d.negative = false;
+            
+            int32Array A = int32ArrayMulMod(int32ArraySub(P.Y, P.X), int32ArraySub(Q.Y, Q.X), ed25519p);
+            int32Array B = int32ArrayMulMod(int32ArrayAdd(P.Y, P.X), int32ArrayAdd(Q.Y, Q.X), ed25519p);
+            
+            int32Array C = int32ArrayMul(int32ArrayMul(P.T, Q.T), d);
+            C.digits = UInt32ArraySHL(C.digits);
+            C = int32ArrayMod(C, ed25519p);
+            
+            int32Array D = int32ArrayMul(P.Z, Q.Z);
+            D.digits = UInt32ArraySHL(D.digits);
+            D = int32ArrayMod(D, ed25519p);
+
+            int32Array E = int32ArraySub(B, A);
+            int32Array F = int32ArraySub(D, C);
+            int32Array G = int32ArrayAdd(D, C);
+            int32Array H = int32ArrayAdd(B, A);
+
+            
+
+            pointExtUInt32 returnVal;
+            returnVal.X = int32ArrayMul(E, F);
+            returnVal.Y = int32ArrayMul(G, H);
+            returnVal.Z = int32ArrayMul(F, G);
+            returnVal.T = int32ArrayMul(E, H);
+
+            return returnVal;
+        }
+
+        UInt32[] UInt32ArraySubMod(UInt32[] a, UInt32[] b, UInt32 [] p)
+        {
+            switch (UInt32ArrayCmpNoSign(a, b))
+            {
+                case 0: return new uint[] { 0x0 };
+                case 1:
+                    {
+                        return UInt32ArrayMod(UInt32ArraySubSimple(a, b), p);
+                    }
+                case -1:
+                    {
+                        return UInt32ArrayMod(UInt32ArraySubSimple(p, UInt32ArrayMod(UInt32ArraySubSimple(b, a), p)),p);
+                    }
+
+            }
+            return null;
+        }
+
+        int32Array int32ArraySub(UInt32[] a, UInt32[] b)
+        {
+            int32Array x;
+            x.digits = a;
+            x.negative = false;
+
+            int32Array y;
+            y.digits = b;
+            y.negative = false;
+
+            return int32ArraySub(x, y);
+
+        }
+        int32Array int32ArrayAdd(UInt32[] a, UInt32[] b)
+        {
+            int32Array x;
+            x.digits = a;
+            x.negative = false;
+
+            int32Array y;
+            y.digits = b;
+            y.negative = false;
+
+            return int32ArrayAdd(x, y);
+
+        }
+
+        int32Array int32ArraySub(int32Array a, int32Array b)
+        {
+            int32Array returnVal;
+
+            b.negative = !b.negative;
+            returnVal = int32ArrayAdd(a, b);
+            b.negative = !b.negative;
+
+            return returnVal;
+        }
+
+        int32Array int32ArrayAdd(int32Array a, int32Array b)
+        {
+            int32Array returnVal;
+            returnVal.digits = new UInt32[] { 0x0 };
+            returnVal.negative = false;
+
+            
+            if (a.negative)
+            {
+                if (b.negative)
+                {
+                    returnVal.negative = true;
+                    returnVal.digits = UInt32AddNoSign(a.digits, b.digits);
+                }
+                else
+                {
+                    switch (UInt32ArrayCmpNoSign(a.digits, b.digits))
+                    {
+                        case -1:
+                            {
+                                returnVal.negative = false;
+                                returnVal.digits = UInt32ArraySubSimple(b.digits, a.digits);
+                                break;
+                            }
+                        case 1:
+                            {
+                                returnVal.negative = true;
+                                returnVal.digits = UInt32ArraySubSimple(a.digits, b.digits);
+                                break;
+                            }
+                    }
+                }
+            }
+            else
+            {
+                if (b.negative)
+                {
+                    switch (UInt32ArrayCmpNoSign(a.digits, b.digits))
+                    {
+                        case -1:
+                            {
+                                returnVal.negative = true;
+                                returnVal.digits = UInt32ArraySubSimple(b.digits, a.digits);
+                                break;
+                            }
+                        case 1:
+                            {
+                                returnVal.negative = false;
+                                returnVal.digits = UInt32ArraySubSimple(a.digits, b.digits);
+                                break;
+                            }
+                    }
+                }
+                
+                else
+                {
+                    returnVal.negative = false;
+                    returnVal.digits = UInt32AddNoSign(a.digits, b.digits);
+                }
+            }
+            return returnVal;
+        }
+
+        int32Array int32ArrayMulMod(int32Array a, int32Array b, UInt32[] mod)
+        {
+            int32Array returnVal;
+            returnVal.digits = UInt32ArrayMulMod(a.digits, b.digits, mod);
+            if (a.negative == b.negative) returnVal.negative = false;
+            else returnVal.negative = true;
+
+            if (UInt32ArrayIsZero(returnVal.digits))
+            {
+                returnVal.negative = false;
+            }
+            else
+            {
+                if (returnVal.negative == true)
+                {
+                    returnVal.digits = UInt32ArraySubSimple(mod, returnVal.digits);
+                    returnVal.negative = false;
+                }
+
+            }
+            return returnVal;
+        }
+
+        int32Array int32ArrayMul(int32Array a, int32Array b)
+        {
+            int32Array returnVal;
+            returnVal.digits = UInt32ArrayMulNoSign(a.digits, b.digits);
+            
+            if ((a.negative == b.negative) || (UInt32ArrayIsZero(returnVal.digits))) returnVal.negative = false;
+            else returnVal.negative = true;
+
+            return returnVal;
+        }
+
+        int32Array int32ArrayMod(int32Array a, UInt32[] mod)
+        {
+            int32Array returnVal;
+            returnVal.digits = UInt32ArrayMod(a.digits, mod);
+            returnVal.negative = a.negative;
+            if (UInt32ArrayIsZero(returnVal.digits))
+            {
+                returnVal.negative = false;
+            }
+            if (returnVal.negative == true)
+            {
+                returnVal.digits = UInt32ArraySubSimple(mod, returnVal.digits);
+                returnVal.negative = false;
+            }
+            
+
+            return returnVal;
+
+        }
+
+        void addBigIntToLogBox(int32Array x)
+        {
+            Byte[] xBytes = fromUInt32ArrayLE(x.digits);
+            xBytes = xBytes.Append((byte)0x00).ToArray();
+
+            BigInteger xBigInt = new BigInteger(xBytes);
+
+            if (x.negative) xBigInt = xBigInt * -1;
+
+            AddToLogBox(xBigInt.ToString() + "\r\n");
+
+       
+
+        }
+
+        void addBigIntToLogBox(UInt32[] x_in)
+        {
+            int32Array x;
+            x.digits = x_in;
+            x.negative = false;
+            addBigIntToLogBox(x);
 
         }
     }
