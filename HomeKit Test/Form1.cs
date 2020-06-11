@@ -115,6 +115,18 @@ namespace HomeKit_Test
         UInt32[] storedS;
         Byte[] storeds;
 
+        const string cfgFile  = "hap.cfg";
+        const byte cfgDeviceLTPK = 0x00;
+        const byte cfgDevicePairingID = 0x01;
+        const byte cfgAccessoryLTSK = 0x02;
+
+        Byte[] dataDeviceLTPK = new byte[0];
+        Byte[] dataDevicePairingID = new byte[0];
+        Byte[] dataAccessoryLTSK = new byte[] {0x9d, 0x61, 0xb1, 0x9d, 0xef, 0xfd, 0x5a, 0x60, 0xba, 0x84, 0x4a, 0xf4, 0x92, 0xec, 0x2c, 0xc4,
+                                        0x44, 0x49, 0xc5, 0x69, 0x7b, 0x32, 0x69, 0x19, 0x70, 0x3b, 0xac, 0x03, 0x1c, 0xae, 0x7f, 0x60};
+        string dataPairingID = "12:13:12:12:12:13";
+
+
         const int DevicePort = 5252;
         const string DeviceCode = "143-83-105";
         const Byte generator = 5;
@@ -150,7 +162,7 @@ namespace HomeKit_Test
             var za = new ServiceProfile("Test HAP", "_hap._tcp", DevicePort);
             za.AddProperty("c#", "12");
             za.AddProperty("ff", "0");
-            za.AddProperty("id", "12:13:12:12:12:13");
+            za.AddProperty("id", dataPairingID);
             za.AddProperty("md", "Ver 1");
             za.AddProperty("sf", "1");
             za.AddProperty("ci", "1");
@@ -246,9 +258,9 @@ namespace HomeKit_Test
 
             msg = new byte[] { 0x72 };
 
-            Byte[] publicKey = ed25519PublicKey(secret);
+            //Byte[] publicKey = ed25519PublicKey(secret);
 
-            Byte[] signature = ed25519sign(secret, msg);
+            //Byte[] signature = ed25519sign(secret, msg);
 
             //signature[22] = 0x69;
 
@@ -257,7 +269,7 @@ namespace HomeKit_Test
             //publicKey[12] = 0x24;
 
 
-            bool result = ed25519verify(publicKey, msg, signature);
+            //bool result = ed25519verify(publicKey, msg, signature);
 
             //addBigIntToLogBox(ed25519G.X);
             //addBigIntToLogBox(ed25519G.Y);
@@ -557,18 +569,48 @@ namespace HomeKit_Test
                                        
                                         subTLV = chacha20(chachaKey, nonce, subTLV, 1);
 
-                                        Byte[] devicePairingID = findTLVKey(subTLV, 0x01, subTLV.Length);
-                                        Byte[] deviceLTPK = findTLVKey(subTLV, 0x03, subTLV.Length);
+                                        dataDevicePairingID = findTLVKey(subTLV, 0x01, subTLV.Length);
+                                        dataDeviceLTPK = findTLVKey(subTLV, 0x03, subTLV.Length);
                                         Byte[] deviceSignature = findTLVKey(subTLV, 0x0a, subTLV.Length);
 
                                         Byte[] deviceX = genHKDFSHA512(fromUInt32Array(storedK), "Pair-Setup-Controller-Sign-Salt", "Pair-Setup-Controller-Sign-Info", 32);
-                                        Byte[] deviceInfo = deviceX.Concat(devicePairingID).Concat(deviceLTPK).ToArray();
+                                        Byte[] deviceInfo = deviceX.Concat(dataDevicePairingID).Concat(dataDeviceLTPK).ToArray();
 
-                                        AddToLogBox(Encoding.UTF8.GetString(devicePairingID) + "\r\n");
+                                        AddToLogBox(Encoding.UTF8.GetString(dataDevicePairingID) + "\r\n");
                                         
-                                        bool result = ed25519verify(deviceLTPK, deviceInfo, deviceSignature);
+                                        bool result = ed25519verify(dataDeviceLTPK, deviceInfo, deviceSignature);
                                         AddToLogBox(result.ToString() + "\r\n");
 
+                                        writeCfg();
+
+                                        Byte[] pairingID = Encoding.UTF8.GetBytes(dataPairingID);
+
+                                        Byte[] accessoryLTPK = ed25519PublicKey(dataAccessoryLTSK);
+                                        Byte[] accessoryX = genHKDFSHA512(fromUInt32Array(storedK), "Pair-Setup-Accessory-Sign-Salt", "Pair-Setup-Accessory-Sign-Info", 32);
+                                        Byte[] accessoryInfo = accessoryX.Concat(pairingID).Concat(accessoryLTPK).ToArray();
+
+                                        Byte[] accessorySignature = ed25519sign(dataAccessoryLTSK, accessoryInfo);
+
+                                        subTLV = new byte[0];
+                                        appendTLVBytes(ref subTLV, 0x01, pairingID);
+                                        appendTLVBytes(ref subTLV, 0x03, accessoryLTPK);
+                                        appendTLVBytes(ref subTLV, 0x0a, accessorySignature);
+
+                                        nonce = Encoding.UTF8.GetBytes("PS-Msg06");
+
+                                        encData = chacha20(chachaKey, nonce, subTLV, 1);
+                                        authTag = genAuthTag(encData, chachaKey, nonce);
+                                        Byte[] respData = encData.Concat(authTag).ToArray();
+
+                                        Byte[] response = new byte[0];
+
+                                        appendTLVBytes(ref response, 0x06, new byte[] { 0x06 });
+                                        appendTLVBytes(ref response, 0x05, respData);
+
+                                        sendTLVResponse(stream, response);
+
+
+                                        AddToLogBox(verifyAuthTag(encData, authTag, chachaKey, nonce).ToString() + "\r\n");
                                         
                                         AddToLogBox("Reached Level 5\r\n");
                                         break;
@@ -584,17 +626,62 @@ namespace HomeKit_Test
 
         }
 
+        void writeCfg()
+        {
+            Byte[] toWrite = new byte[0];
+
+            toWrite = toWrite.Concat(genCfgItem(cfgDeviceLTPK, dataDeviceLTPK)).ToArray();
+            toWrite = toWrite.Concat(genCfgItem(cfgDevicePairingID, dataDevicePairingID)).ToArray();
+            toWrite = toWrite.Concat(genCfgItem(cfgAccessoryLTSK, dataAccessoryLTSK)).ToArray();
+
+            File.WriteAllBytes(cfgFile, toWrite);
+        }
+
+        Byte[] genCfgItem(Byte cfgID, Byte[] data)
+        {
+            Byte[] returnVal = new byte[data.Length + 3];
+
+            returnVal[0] = cfgID;
+            Byte[] lenBytes = uint16toBytes((UInt16)data.Length);
+            returnVal[1] = lenBytes[0];
+            returnVal[2] = lenBytes[1];
+
+            for (int i = 0; i < data.Length; i++) returnVal[i + 3] = data[i];
+            
+            return returnVal;
+
+        }
+
+        Byte[] uint16toBytes(UInt16 x)
+        {
+            Byte[] returnVal = new byte[2];
+            returnVal[0] = (byte)(x & 0xFF);
+            returnVal[1] = (byte)(x >> 8);
+
+            return returnVal;
+        }
+
         bool verifyAuthTag(Byte[] msg, Byte[] authTag, Byte[] key, Byte[] nonce)
         {
+
+            Byte[] expectedPoly1305 = genAuthTag(msg, key, nonce);
+            return byteArrayEqual(authTag, expectedPoly1305);
+        }
+
+        Byte[] genAuthTag(Byte[] msg, Byte[] key, Byte[] nonce)
+        {
+
+            
             Byte[] mac = msg;
             if (msg.Length % 16 != 0) mac = msg.Concat(new Byte[16 - (msg.Length % 16)]).ToArray();
             mac = mac.Concat(new Byte[8]).ToArray();
             mac = mac.Concat(fromUInt32ArrayLE(new UInt32[] { (UInt32)msg.Length, 0x0 })).ToArray();
 
             Byte[] poly1305Key = chacha20Block(key, nonce, 0);
-            Byte[] expectedPoly1305 = poly1305(poly1305Key, mac);
+            Byte[] authTag = poly1305(poly1305Key, mac);
 
-            return byteArrayEqual(authTag, expectedPoly1305);
+            return authTag;
+
         }
         void sendPairingError(NetworkStream stream, Byte state, Byte errorCode)
         {
