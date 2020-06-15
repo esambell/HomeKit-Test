@@ -34,6 +34,9 @@ using System.Security.Policy;
 using System.Runtime.Remoting.Messaging;
 using System.Security.Cryptography;
 using System.Net.Configuration;
+using System.Runtime.InteropServices.WindowsRuntime;
+using constants;
+using System.Runtime.InteropServices;
 
 namespace HomeKit_Test
 {
@@ -124,7 +127,7 @@ namespace HomeKit_Test
         Byte[] dataDevicePairingID = new byte[0];
         Byte[] dataAccessoryLTSK = new byte[] {0x9d, 0x61, 0xb1, 0x9d, 0xef, 0xfd, 0x5a, 0x60, 0xba, 0x84, 0x4a, 0xf4, 0x92, 0xec, 0x2c, 0xc4,
                                         0x44, 0x49, 0xc5, 0x69, 0x7b, 0x32, 0x69, 0x19, 0x70, 0x3b, 0xac, 0x03, 0x1c, 0xae, 0x7f, 0x60};
-        string dataPairingID = "12:13:12:12:12:13";
+        string dataPairingID = "12:13:12:12:13:13";
 
 
         const int DevicePort = 5252;
@@ -136,6 +139,18 @@ namespace HomeKit_Test
         MulticastService mdns;
 
         bool paired = false;
+
+        Byte[] sessionKey;
+        Byte[] devicePublicKey;
+        Byte[] accessoryPublicKey;
+        bool encryptedSession = false;
+        Byte[] accToControlKey;
+        Byte[] controlToAccKey;
+        Byte[] sharedKey;
+        UInt64c accToControlNonce;
+        UInt64c controlToAccNonce;
+
+
         public Form1()
         {
             InitializeComponent();
@@ -160,16 +175,17 @@ namespace HomeKit_Test
             var sd = new ServiceDiscovery(mdns);
 
             var za = new ServiceProfile("Test HAP", "_hap._tcp", DevicePort);
-            za.AddProperty("c#", "12");
+            za.AddProperty("c#", "15");
             za.AddProperty("ff", "0");
             za.AddProperty("id", dataPairingID);
-            za.AddProperty("md", "Ver 1");
+            za.AddProperty("md", "Device1,1");
             za.AddProperty("sf", "1");
-            za.AddProperty("ci", "1");
+            za.AddProperty("ci", "7");
             za.AddProperty("pv", "1.1");
             sd.Advertise(za);
 
             mdns.Start();
+           
             TCPListenerTask.RunWorkerAsync();
 
             init_ed25519();
@@ -258,6 +274,58 @@ namespace HomeKit_Test
 
             msg = new byte[] { 0x72 };
 
+
+            Byte[] k_test = new Byte[] {    0xa5, 0x46, 0xe3, 0x6b, 0xf0, 0x52, 0x7c, 0x9d, 0x3b, 0x16, 0x15, 0x4b, 0x82, 0x46, 0x5e, 0xdd,
+                                            0x62, 0x14, 0x4c, 0x0a, 0xc1, 0xfc, 0x5a, 0x18, 0x50, 0x6a, 0x22, 0x44, 0xba, 0x44, 0x9a, 0xc4 };
+
+            Byte[] u = new byte[] {         0xe6, 0xdb, 0x68, 0x67, 0x58, 0x30, 0x30, 0xdb, 0x35, 0x94, 0xc1, 0xa4, 0x24, 0xb1, 0x5f, 0x7c,
+                                            0x72, 0x66, 0x24, 0xec, 0x26, 0xb3, 0x35, 0x3b, 0x10, 0xa9, 0x03, 0xa6, 0xd0, 0xab, 0x1c, 0x4c };
+
+            Byte[] aPrivate = new byte[] {  0x77, 0x07, 0x6d, 0x0a, 0x73, 0x18, 0xa5, 0x7d, 0x3c, 0x16, 0xc1, 0x72, 0x51, 0xb2, 0x66, 0x45,
+                                            0xdf, 0x4c, 0x2f, 0x87, 0xeb, 0xc0, 0x99, 0x2a, 0xb1, 0x77, 0xfb, 0xa5, 0x1d, 0xb9, 0x2c, 0x2a };
+
+            Byte[] bPrivate = new byte[] {  0x5d, 0xab, 0x08, 0x7e, 0x62, 0x4a, 0x8a, 0x4b, 0x79, 0xe1, 0x7f, 0x8b, 0x83, 0x80, 0x0e, 0xe6,
+                                            0x6f, 0x3b, 0xb1, 0x29, 0x26, 0x18, 0xb6, 0xfd, 0x1c, 0x2f, 0x8b, 0x27, 0xff, 0x88, 0xe0, 0xeb };
+
+            Byte[] nine = new byte[32];
+            nine[0] = 9;
+
+            AddToLogBox(constants.constants.accDB);
+
+            //Byte[] aPublic = X25519(aPrivate, nine);
+            //Byte[] bPublic = X25519(bPrivate, nine);
+            //Byte[] kShared1 = X25519(bPrivate, aPublic);
+            //Byte[] kShared2 = X25519(aPrivate, bPublic);
+
+
+            //foreach (UInt32 i in aPublic)
+            //{
+            //    //AddToLogBox(i.ToString() + " " + i.ToString("X8") + "\r\n");
+            //    AddToLogBox(i.ToString("x2"));
+            //}
+            //AddToLogBox("\r\n");
+
+            //foreach (UInt32 i in bPublic)
+            //{
+            //    //AddToLogBox(i.ToString() + " " + i.ToString("X8") + "\r\n");
+            //    AddToLogBox(i.ToString("x2"));
+            //}
+            //AddToLogBox("\r\n");
+
+            //foreach (UInt32 i in kShared1)
+            //{
+            //    //AddToLogBox(i.ToString() + " " + i.ToString("X8") + "\r\n");
+            //    AddToLogBox(i.ToString("x2"));
+            //}
+            //AddToLogBox("\r\n");
+
+            //foreach (UInt32 i in kShared2)
+            //{
+            //    //AddToLogBox(i.ToString() + " " + i.ToString("X8") + "\r\n");
+            //    AddToLogBox(i.ToString("x2"));
+            //}
+            //AddToLogBox("\r\n");
+
             //Byte[] publicKey = ed25519PublicKey(secret);
 
             //Byte[] signature = ed25519sign(secret, msg);
@@ -286,12 +354,7 @@ namespace HomeKit_Test
 
             //testResult.digits = UInt32ArrayMulNoSign(temp, temp1);
 
-            //foreach (UInt32 i in signature)
-            //{
-            //    //AddToLogBox(i.ToString() + " " + i.ToString("X8") + "\r\n");
-            //    AddToLogBox(i.ToString("x2"));
-            //}
-            //AddToLogBox("\r\n");
+
             //AddToLogBox(result.ToString() + "\r\n");
 
 
@@ -362,11 +425,16 @@ namespace HomeKit_Test
                 string requestType = null;
                 string uri = null;
                 Byte curMethod = 0;
-                
+                int encDataReceived = 0;
+                int encDataExpected = 0;
+                bool connectionToClose = false;
 
-                    while ((i = stream.Read(received, 0, 1)) != 0)
+
+
+                while (client.Connected && (i = stream.Read(received, 0, 1)) != 0)
+                {
+                    if (!encryptedSession)
                     {
-
                         if (parsingHeader)
                         {
                             // Translate data bytes to a ASCII string.
@@ -422,208 +490,407 @@ namespace HomeKit_Test
                             request = "";
                             dataBytesReceived = 0;
                         }
-                        
+
+
+                    }
+                    else
+                    {
+                        bytes[encDataReceived++] = received[0];
+                        if (encDataReceived == 2)
+                        {
+                            encDataExpected = bytes[0] + bytes[1] * 0x100;
+                            AddToLogBox("Encrypted data expected: " + encDataExpected.ToString() + "\r\n");
+                        }
+                        if (encDataReceived == encDataExpected + 2 + 16)
+                        {
+                            Byte[] msg;
+
+                            if (AEADDecrypt(bytes, controlToAccKey, controlToAccNonce, 2, encDataReceived, out msg))
+                            {
+                                AddToLogBox(Encoding.UTF8.GetString(msg) + "\r\n");
+                                controlToAccNonce = UInt64cInc(controlToAccNonce);
+                                encDataExpected = 0;
+                                request = Encoding.UTF8.GetString(msg);
+
+                                if (request.Substring(0, 4) == "POST") requestType = "POST";
+                                else if (request.Substring(0,3) =="GET") requestType = "GET";
+                                else if (request.Substring(0, 3) == "PUT") requestType = "PUT";
+
+                                int slashIndex = request.IndexOf('/');
+                                int spaceIndex = request.IndexOf(' ', slashIndex);
+                                uri = request.Substring(slashIndex, spaceIndex - slashIndex);
+                                int contentLengthIndex;
+
+                                if ((contentLengthIndex = request.IndexOf("Content-Length:") + 15) != 14)
+                                {
+                                    int lineEndIndex = request.IndexOf('\r', contentLengthIndex);
+                                    contentLength = int.Parse(request.Substring(contentLengthIndex + 1, lineEndIndex - contentLengthIndex - 1));
+                                }
+                                else contentLength = 0;
+
+                                Byte[] contentBytes = new Byte[contentLength];
+
+                                int contentStart = 0;
+                                for (int j=0; i< msg.Length-4;i++)
+                                {
+                                    if ((msg[j] == 0x0d) && (msg[j + 1] == 0x0a) && (msg[j + 2] == 0x0d) && (msg[j + 3] == 0x0a))
+                                    {
+                                        contentStart = j + 4;
+                                        break;
+                                    }
+                                }
+                                for (int j = contentStart; j < msg.Length && (j - contentStart) < contentLength; j++)
+                                {
+                                    contentBytes[j - contentStart] = msg[j];
+                                }
+
+                                processHTTP(stream, requestType, uri, contentBytes, contentLength, ref curMethod);
+
+
+
+                            }
+                            else
+                            {
+                                AddToLogBox("Encoded session decrypt fail\r\n");
+                                encryptedSession = false;
+                                connectionToClose = true;
+                                break;
+                            }
+
+
+
+                        }
 
                     }
 
+                }
+
                 client.Close();
                 AddToLogBox("Conenction Closed\r\n");
-               
+                connectionToClose = false;
+                encryptedSession = false;
             }
 
 
 
         }
 
+
         void processHTTP(NetworkStream stream, String requestType, String uri, Byte[] bytes, int dataBytesReceived, ref Byte curMethod)
         {
             switch (requestType)
             {
                 case "POST":
-                    switch (uri)
                     {
-                        case "/pair-setup":
-                       
-                            Byte[] TLVState = findTLVKey(bytes, 0x06, dataBytesReceived);
-                            if (TLVState == null || TLVState.Length == 0) break;
-                            int state = TLVState[0];
-                            AddToLogBox("State: " + state + "\r\n");
-                            switch (state)
-                            {
-                                case 1:
-
+                        switch (uri)
+                        {
+                            case "/pair-setup":
+                                {
+                                    Byte[] TLVState = findTLVKey(bytes, 0x06, dataBytesReceived);
+                                    if (TLVState == null || TLVState.Length == 0) break;
+                                    int state = TLVState[0];
+                                    AddToLogBox("Setup State: " + state + "\r\n");
+                                    switch (state)
                                     {
-                                        if (paired)
-                                        {
-                                            Byte[] responseBytes = new Byte[] { 0x06, 0x01, 0x02, 0x07, 0x01, 0x06 };
-                                            sendTLVResponse(stream, responseBytes);
+                                        case 1:
+
+                                            {
+                                                if (paired)
+                                                {
+                                                    Byte[] responseBytes = new Byte[] { 0x06, 0x01, 0x02, 0x07, 0x01, 0x06 };
+                                                    sendTLVResponse(stream, responseBytes);
 
 
-                                        }
-                                        else
-                                        {
-                                            
+                                                }
+                                                else
+                                                {
 
-                                            storeds = byteGenRandom(16);
 
-                                            storedx = generatePrivateKey(toUInt32Array(storeds), userName, DeviceCode);
-                                            storedv = generateVerifier(storedx);
-                                            storedk = generateMultiplier();
-                                            //storedA = generatePublicA(a);
-                                            storedb = toUInt32Array(byteGenRandom(32));
-                                            storedB = generatePublicB(storedk, storedv, storedb);
-                                            
+                                                    storeds = byteGenRandom(16);
 
-                                            Byte[] TLVResponse = new byte[0];
-                                            appendTLVBytes(ref TLVResponse, 0x06, new byte[] { 0x02 });
-                                            appendTLVBytes(ref TLVResponse, 0x02, storeds);
-                                            appendTLVBytes(ref TLVResponse, 0x03, fromUInt32Array(storedB));
+                                                    storedx = generatePrivateKey(toUInt32Array(storeds), userName, DeviceCode);
+                                                    storedv = generateVerifier(storedx);
+                                                    storedk = generateMultiplier();
+                                                    //storedA = generatePublicA(a);
+                                                    storedb = toUInt32Array(byteGenRandom(32));
+                                                    storedB = generatePublicB(storedk, storedv, storedb);
 
-                                            sendTLVResponse(stream, TLVResponse);
 
-                                        }
+                                                    Byte[] TLVResponse = new byte[0];
+                                                    appendTLVBytes(ref TLVResponse, 0x06, new byte[] { 0x02 });
+                                                    appendTLVBytes(ref TLVResponse, 0x02, storeds);
+                                                    appendTLVBytes(ref TLVResponse, 0x03, fromUInt32Array(storedB));
 
-                                        break;
+                                                    sendTLVResponse(stream, TLVResponse);
+
+                                                }
+
+                                                break;
+                                            }
+                                        case 3:
+                                            {
+                                                Byte[] publicA = findTLVKey(bytes, 0x03, dataBytesReceived);
+                                                Byte[] proofA = findTLVKey(bytes, 0x04, dataBytesReceived);
+
+                                                UInt32[] publicAUInt32 = toUInt32Array(publicA);
+                                                publicAUInt32 = UInt32ArrayMod(publicAUInt32, N);
+                                                if (UInt32ArrayCmpNoSign(publicAUInt32, new UInt32[] { 0x0 }) == 0)
+                                                {
+                                                    AddToLogBox("A mod N == 0\r\n");
+                                                    sendPairingError(stream, 0x04, 0x02);
+                                                    break;
+                                                }
+
+                                                storedu = generateScrambling(toUInt32Array(publicA), storedB);
+                                                storedS = generateSessionSecret(toUInt32Array(publicA), storedv, storedu, storedb);
+                                                storedK = generateSessionKey(storedS);
+
+                                                Byte[] hashN = genSHA512(N);
+                                                Byte[] gPad = new byte[1];
+                                                gPad[gPad.Length - 1] = generator;
+                                                Byte[] hashG = genSHA512(gPad);
+                                                Byte[] NxorG = new Byte[hashN.Length];
+                                                for (int i = 0; i < NxorG.Length; i++) NxorG[i] = (byte)(hashN[i] ^ hashG[i]);
+                                                Byte[] hashI = genSHA512(userName);
+                                                Byte[] publicB = fromUInt32Array(storedB);
+                                                Byte[] K = fromUInt32Array(storedK);
+
+                                                Byte[] localProofA = genSHA512(NxorG, hashI, storeds, publicA, publicB, K);
+
+
+
+                                                AddToLogBox("public A Length: " + publicA.Length.ToString() + "\r\n");
+                                                if (proofA == null)
+                                                {
+                                                    AddToLogBox("proof A null");
+                                                    break;
+                                                }
+                                                AddToLogBox("proof A Length: " + proofA.Length.ToString() + "\r\n");
+                                                AddToLogBox(byteArrayEqual(proofA, localProofA).ToString() + "\r\n");
+
+                                                if (!byteArrayEqual(proofA, localProofA))
+                                                {
+                                                    AddToLogBox("Client Proof Mismatch\r\n");
+                                                    sendPairingError(stream, 0x04, 0x02);
+                                                    break;
+                                                }
+
+                                                byte[] proofB = genSHA512(publicA, proofA, K);
+
+                                                if (checkBox1.Checked) proofB = byteArrayReverse(proofB);
+
+                                                Byte[] TLVResponse = new byte[0];
+                                                appendTLVBytes(ref TLVResponse, 0x06, new byte[] { 0x04 });
+                                                appendTLVBytes(ref TLVResponse, 0x04, proofB);
+                                                sendTLVResponse(stream, TLVResponse);
+
+                                                AddToLogBox("Server Proof Sent\r\n");
+
+                                                break;
+
+                                            }
+                                        case 5:
+                                            {
+                                                Byte[] encData = findTLVKey(bytes, 0x05, dataBytesReceived);
+                                                Byte[] chachaKey = genHKDFSHA512(fromUInt32Array(storedK), "Pair-Setup-Encrypt-Salt", "Pair-Setup-Encrypt-Info", 32);
+                                                Byte[] nonce = Encoding.UTF8.GetBytes("PS-Msg05");
+
+                                                Byte[] subTLV = new byte[encData.Length - 16];
+                                                Byte[] authTag = new byte[16];
+
+                                                for (int i = 0; i < subTLV.Length; i++) subTLV[i] = encData[i];
+                                                for (int i = 0; i < 16; i++) authTag[i] = encData[encData.Length - 16 + i];
+
+                                                if (verifyAuthTag(subTLV, authTag, chachaKey, nonce)) AddToLogBox("M5 decrypt successful\r\n");
+                                                else
+                                                {
+                                                    sendPairingError(stream, 0x06, 0x02);
+                                                    AddToLogBox("M5 Auth Tag Fail\r\n");
+                                                    break;
+                                                }
+
+                                                subTLV = chacha20(chachaKey, nonce, subTLV, 1);
+
+                                                dataDevicePairingID = findTLVKey(subTLV, 0x01, subTLV.Length);
+                                                dataDeviceLTPK = findTLVKey(subTLV, 0x03, subTLV.Length);
+                                                Byte[] deviceSignature = findTLVKey(subTLV, 0x0a, subTLV.Length);
+
+                                                Byte[] deviceX = genHKDFSHA512(fromUInt32Array(storedK), "Pair-Setup-Controller-Sign-Salt", "Pair-Setup-Controller-Sign-Info", 32);
+                                                Byte[] deviceInfo = deviceX.Concat(dataDevicePairingID).Concat(dataDeviceLTPK).ToArray();
+
+                                                AddToLogBox(Encoding.UTF8.GetString(dataDevicePairingID) + "\r\n");
+
+                                                bool result = ed25519verify(dataDeviceLTPK, deviceInfo, deviceSignature);
+                                                AddToLogBox(result.ToString() + "\r\n");
+
+                                                writeCfg();
+
+                                                Byte[] pairingID = getAccessoryPairingIDBytes(dataPairingID);
+
+                                                Byte[] accessoryLTPK = ed25519PublicKey(dataAccessoryLTSK);
+                                                Byte[] accessoryX = genHKDFSHA512(fromUInt32Array(storedK), "Pair-Setup-Accessory-Sign-Salt", "Pair-Setup-Accessory-Sign-Info", 32);
+                                                Byte[] accessoryInfo = accessoryX.Concat(pairingID).Concat(accessoryLTPK).ToArray();
+
+                                                Byte[] accessorySignature = ed25519sign(dataAccessoryLTSK, accessoryInfo);
+
+                                                subTLV = new byte[0];
+                                                appendTLVBytes(ref subTLV, 0x01, pairingID);
+                                                appendTLVBytes(ref subTLV, 0x03, accessoryLTPK);
+                                                appendTLVBytes(ref subTLV, 0x0a, accessorySignature);
+
+                                                nonce = Encoding.UTF8.GetBytes("PS-Msg06");
+
+                                                encData = chacha20(chachaKey, nonce, subTLV, 1);
+                                                authTag = genAuthTag(encData, chachaKey, nonce);
+                                                Byte[] respData = encData.Concat(authTag).ToArray();
+
+                                                Byte[] response = new byte[0];
+
+                                                appendTLVBytes(ref response, 0x06, new byte[] { 0x06 });
+                                                appendTLVBytes(ref response, 0x05, respData);
+
+                                                sendTLVResponse(stream, response);
+
+
+                                                AddToLogBox(verifyAuthTag(encData, authTag, chachaKey, nonce).ToString() + "\r\n");
+
+                                                AddToLogBox("Reached Level 5\r\n");
+                                                break;
+                                            }
+
                                     }
-                                case 3:
+                                    break;
+                                }
+                            case "/pair-verify":
+                                {
+
+                                    Byte[] TLVState = findTLVKey(bytes, 0x06, dataBytesReceived);
+                                    if (TLVState == null || TLVState.Length == 0) break;
+                                    int state = TLVState[0];
+                                    AddToLogBox("Verify State: " + state + "\r\n");
+
+                                    switch (state)
                                     {
-                                        Byte[] publicA = findTLVKey(bytes, 0x03, dataBytesReceived);
-                                        Byte[] proofA = findTLVKey(bytes, 0x04, dataBytesReceived);
+                                        case 0x01:
+                                            {
+                                                devicePublicKey = findTLVKey(bytes, 0x03, dataBytesReceived);
+                                                Byte[] accessoryPrivateKey = byteGenRandom(32);
+                                                accessoryPublicKey = c25519Public(accessoryPrivateKey);
+                                                sharedKey = c25519Shared(accessoryPrivateKey, devicePublicKey);
 
-                                        UInt32[] publicAUInt32 = toUInt32Array(publicA);
-                                        publicAUInt32 = UInt32ArrayMod(publicAUInt32, N);
-                                        if (UInt32ArrayCmpNoSign(publicAUInt32, new UInt32[] { 0x0 }) == 0)
-                                        {
-                                            AddToLogBox("A mod N == 0\r\n");
-                                            sendPairingError(stream, 0x04, 0x02);
-                                            break;
-                                        }
+                                                Byte[] accessoryInfo = accessoryPublicKey;
+                                                Byte[] pairingID = getAccessoryPairingIDBytes(dataPairingID);
+                                                accessoryInfo = accessoryInfo.Concat(pairingID).ToArray();
+                                                accessoryInfo = accessoryInfo.Concat(devicePublicKey).ToArray();
 
-                                        storedu = generateScrambling(toUInt32Array(publicA), storedB);
-                                        storedS = generateSessionSecret(toUInt32Array(publicA), storedv, storedu, storedb);
-                                        storedK = generateSessionKey(storedS);
+                                                Byte[] signature = ed25519sign(dataAccessoryLTSK, accessoryInfo);
 
-                                        Byte[] hashN = genSHA512(N);
-                                        Byte[] gPad = new byte[1];
-                                        gPad[gPad.Length - 1] = generator;
-                                        Byte[] hashG = genSHA512(gPad);
-                                        Byte[] NxorG = new Byte[hashN.Length];
-                                        for (int i = 0; i < NxorG.Length;i++) NxorG[i]= (byte)(hashN[i] ^ hashG[i]);
-                                        Byte[] hashI = genSHA512(userName);
-                                        Byte[] publicB = fromUInt32Array(storedB);
-                                        Byte[] K = fromUInt32Array(storedK);
+                                                Byte[] subTLV = new Byte[0];
+                                                appendTLVBytes(ref subTLV, 0x01, pairingID);
+                                                appendTLVBytes(ref subTLV, 0x0a, signature);
 
-                                        Byte[] localProofA = genSHA512(NxorG, hashI, storeds, publicA, publicB, K);
+                                                sessionKey = genHKDFSHA512(sharedKey, "Pair-Verify-Encrypt-Salt", "Pair-Verify-Encrypt-Info", 32);
 
+                                                Byte[] nonce = Encoding.UTF8.GetBytes("PV-Msg02");
+                                                Byte[] encData = chacha20(sessionKey, nonce, subTLV, 1);
+                                                Byte[] authTag = genAuthTag(encData, sessionKey, nonce);
+                                                Byte[] respData = encData.Concat(authTag).ToArray();
 
-                                    
-                                        AddToLogBox("public A Length: " + publicA.Length.ToString() + "\r\n");
-                                        if (proofA == null)
-                                        {
-                                            AddToLogBox("proof A null");
-                                            break;
-                                        }
-                                        AddToLogBox("proof A Length: " + proofA.Length.ToString() + "\r\n");
-                                        AddToLogBox(byteArrayEqual(proofA, localProofA).ToString() + "\r\n");
+                                                Byte[] response = new Byte[0];
+                                                appendTLVBytes(ref response, 0x06, new Byte[] { 0x02 });
+                                                appendTLVBytes(ref response, 0x03, accessoryPublicKey);
+                                                appendTLVBytes(ref response, 0x05, respData);
 
-                                        if (!byteArrayEqual(proofA, localProofA))                                        
-                                        {
-                                            AddToLogBox("Client Proof Mismatch\r\n");
-                                            sendPairingError(stream, 0x04, 0x02);
-                                            break;
-                                        }
+                                                sendTLVResponse(stream, response);
 
-                                        byte[] proofB = genSHA512(publicA, proofA, K);
-                                       
-                                        if (checkBox1.Checked) proofB = byteArrayReverse(proofB);
+                                                break;
+                                            }
 
-                                        Byte[] TLVResponse = new byte[0];
-                                        appendTLVBytes(ref TLVResponse, 0x06, new byte[] { 0x04 });
-                                        appendTLVBytes(ref TLVResponse, 0x04, proofB);
-                                        sendTLVResponse(stream, TLVResponse);
+                                        case 0x03:
+                                            {
+                                                Byte[] encData = findTLVKey(bytes, 0x05, dataBytesReceived);
+                                                Byte[] nonce = Encoding.UTF8.GetBytes("PV-Msg03");
+                                                Byte[] subTLV = new byte[encData.Length - 16];
+                                                Byte[] authTag = new byte[16];
 
-                                        AddToLogBox("Server Proof Sent\r\n");
+                                                for (int i = 0; i < subTLV.Length; i++) subTLV[i] = encData[i];
+                                                for (int i = 0; i < 16; i++) authTag[i] = encData[encData.Length - 16 + i];
 
-                                        break;
+                                                if (verifyAuthTag(subTLV, authTag, sessionKey, nonce)) AddToLogBox("M3 Verify decrypt successful\r\n");
+                                                else
+                                                {
+                                                    sendPairingError(stream, 0x04, 0x02);
+                                                    AddToLogBox("Verify M3 Auth Tag Fail\r\n");
+                                                    break;
+                                                }
 
-                                    }
-                                case 5:
-                                    {
-                                        Byte[] encData = findTLVKey(bytes, 0x05, dataBytesReceived);
-                                        Byte[] chachaKey = genHKDFSHA512(fromUInt32Array(storedK), "Pair-Setup-Encrypt-Salt", "Pair-Setup-Encrypt-Info", 32);
-                                        Byte[] nonce = Encoding.UTF8.GetBytes("PS-Msg05");
-                                        
-                                        Byte[] subTLV = new byte[encData.Length - 16];
-                                        Byte[] authTag = new byte[16];
+                                                subTLV = chacha20(sessionKey, nonce, subTLV, 1);
 
-                                        for (int i = 0; i < subTLV.Length; i++) subTLV[i] = encData[i];
-                                        for (int i = 0; i < 16; i++) authTag[i] = encData[encData.Length - 16 + i];
+                                                Byte[] receivedPairingID = findTLVKey(subTLV, 0x01, subTLV.Length);
+                                                Byte[] receivedSignature = findTLVKey(subTLV, 0x0a, subTLV.Length);
 
-                                        if (verifyAuthTag(subTLV, authTag, chachaKey, nonce)) AddToLogBox("M5 decrypt successful\r\n");
-                                        else
-                                        {
-                                            sendPairingError(stream, 0x06, 0x02);
-                                            AddToLogBox("M5 Auth Tag Fail\r\n");
-                                            break;
-                                        }
-                                       
-                                        subTLV = chacha20(chachaKey, nonce, subTLV, 1);
+                                                AddToLogBox("receivedPairingID\r\n");
+                                                addBytesToLogBox(receivedPairingID);
+                                                addBytesToLogBox(dataDevicePairingID);
 
-                                        dataDevicePairingID = findTLVKey(subTLV, 0x01, subTLV.Length);
-                                        dataDeviceLTPK = findTLVKey(subTLV, 0x03, subTLV.Length);
-                                        Byte[] deviceSignature = findTLVKey(subTLV, 0x0a, subTLV.Length);
+                                                Byte[] deviceInfo = devicePublicKey;
+                                                deviceInfo = deviceInfo.Concat(receivedPairingID).ToArray();
+                                                deviceInfo = deviceInfo.Concat(accessoryPublicKey).ToArray();
 
-                                        Byte[] deviceX = genHKDFSHA512(fromUInt32Array(storedK), "Pair-Setup-Controller-Sign-Salt", "Pair-Setup-Controller-Sign-Info", 32);
-                                        Byte[] deviceInfo = deviceX.Concat(dataDevicePairingID).Concat(dataDeviceLTPK).ToArray();
+                                                bool result = ed25519verify(dataDeviceLTPK, deviceInfo, receivedSignature);
+                                                AddToLogBox("Verify M3 signature status: " + result);
+                                                if (!result)
+                                                {
+                                                    sendPairingError(stream, 0x04, 0x02);
+                                                    AddToLogBox("Verify M3 Signature Fail\r\n");
+                                                    break;
+                                                }
 
-                                        AddToLogBox(Encoding.UTF8.GetString(dataDevicePairingID) + "\r\n");
-                                        
-                                        bool result = ed25519verify(dataDeviceLTPK, deviceInfo, deviceSignature);
-                                        AddToLogBox(result.ToString() + "\r\n");
+                                                Byte[] response = new Byte[0];
+                                                appendTLVBytes(ref response, 0x06, new Byte[] { 0x04 });
 
-                                        writeCfg();
+                                                sendTLVResponse(stream, response);
 
-                                        Byte[] pairingID = Encoding.UTF8.GetBytes(dataPairingID);
+                                                accToControlKey = genHKDFSHA512(sharedKey, "Control-Salt", "Control-Read-Encryption-Key", 32);
+                                                controlToAccKey = genHKDFSHA512(sharedKey, "Control-Salt", "Control-Write-Encryption-Key", 32);
+                                                encryptedSession = true;
+                                                accToControlNonce = UInt64cAssign(0);
+                                                controlToAccNonce = UInt64cAssign(0);
 
-                                        Byte[] accessoryLTPK = ed25519PublicKey(dataAccessoryLTSK);
-                                        Byte[] accessoryX = genHKDFSHA512(fromUInt32Array(storedK), "Pair-Setup-Accessory-Sign-Salt", "Pair-Setup-Accessory-Sign-Info", 32);
-                                        Byte[] accessoryInfo = accessoryX.Concat(pairingID).Concat(accessoryLTPK).ToArray();
-
-                                        Byte[] accessorySignature = ed25519sign(dataAccessoryLTSK, accessoryInfo);
-
-                                        subTLV = new byte[0];
-                                        appendTLVBytes(ref subTLV, 0x01, pairingID);
-                                        appendTLVBytes(ref subTLV, 0x03, accessoryLTPK);
-                                        appendTLVBytes(ref subTLV, 0x0a, accessorySignature);
-
-                                        nonce = Encoding.UTF8.GetBytes("PS-Msg06");
-
-                                        encData = chacha20(chachaKey, nonce, subTLV, 1);
-                                        authTag = genAuthTag(encData, chachaKey, nonce);
-                                        Byte[] respData = encData.Concat(authTag).ToArray();
-
-                                        Byte[] response = new byte[0];
-
-                                        appendTLVBytes(ref response, 0x06, new byte[] { 0x06 });
-                                        appendTLVBytes(ref response, 0x05, respData);
-
-                                        sendTLVResponse(stream, response);
-
-
-                                        AddToLogBox(verifyAuthTag(encData, authTag, chachaKey, nonce).ToString() + "\r\n");
-                                        
-                                        AddToLogBox("Reached Level 5\r\n");
-                                        break;
+                                                break;
+                                            }
                                     }
 
-                            }
-                            break;
 
+                                    break;
+
+                                }
+
+                        }
+
+                        break;
                     }
-
-                    break;
+                case "GET":
+                    {
+                        switch (uri)
+                        {
+                            case "/accessories":
+                                {
+                                    sendHAPResponse(stream, "200", Encoding.UTF8.GetBytes(constants.constants.accDBtest));
+                                    break;
+                                }
+                        }
+                        
+                        
+                        break;
+                    }
             }
 
+        }
+
+        Byte[] getAccessoryPairingIDBytes(string dataPairingID)
+        {
+            return Encoding.UTF8.GetBytes(dataPairingID);
         }
 
         void writeCfg()
@@ -663,18 +930,29 @@ namespace HomeKit_Test
 
         bool verifyAuthTag(Byte[] msg, Byte[] authTag, Byte[] key, Byte[] nonce)
         {
+            return verifyAuthTag(msg, new Byte[0], authTag, key, nonce);
+        }
+        bool verifyAuthTag(Byte[] msg, Byte[] aad, Byte[] authTag, Byte[] key, Byte[] nonce)
+        {
 
-            Byte[] expectedPoly1305 = genAuthTag(msg, key, nonce);
+            Byte[] expectedPoly1305 = genAuthTag(msg, aad, key, nonce);
             return byteArrayEqual(authTag, expectedPoly1305);
         }
 
         Byte[] genAuthTag(Byte[] msg, Byte[] key, Byte[] nonce)
         {
+            return genAuthTag(msg, new Byte[0], key, nonce);
+        }
+        Byte[] genAuthTag(Byte[] msg, Byte[] aad, Byte[] key, Byte[] nonce)
+        {
 
-            
-            Byte[] mac = msg;
+            Byte[] mac = aad;
+            if (aad.Length % 16 != 0) mac = mac.Concat(new Byte[16 - (aad.Length % 16)]).ToArray();
+
+            mac = mac.Concat(msg).ToArray();
             if (msg.Length % 16 != 0) mac = msg.Concat(new Byte[16 - (msg.Length % 16)]).ToArray();
-            mac = mac.Concat(new Byte[8]).ToArray();
+            
+            mac = mac.Concat(fromUInt32ArrayLE(new UInt32[] { (UInt32)aad.Length, 0x0 })).ToArray();
             mac = mac.Concat(fromUInt32ArrayLE(new UInt32[] { (UInt32)msg.Length, 0x0 })).ToArray();
 
             Byte[] poly1305Key = chacha20Block(key, nonce, 0);
@@ -704,6 +982,38 @@ namespace HomeKit_Test
         {
             sendHTTPResponse(stream, "200", "application/pairing+tlv8", responseBytes, responseBytes.Length);
             AddToLogBox("Send Response: " + responseBytes.Length + "\r\n");
+        }
+
+        void sendHAPResponse(NetworkStream stream, String responseCode)
+        {
+            sendHAPResponse(stream, responseCode, new Byte[0]);
+            return;
+        }
+        void sendHAPResponse(NetworkStream stream, String responseCode, Byte[] responseBytes = null)
+        {
+
+            Byte[] response;
+            if (responseBytes != null && responseBytes.Length > 0) response = genHTTPResponse(stream, responseCode, "application/hap+json", responseBytes, responseBytes.Length);
+            else response = genHTTPResponse(stream, responseCode);
+
+            Byte[] sendBuffer = new Byte[0];
+
+            int curPos = 0;
+            while (curPos < response.Length)
+            {
+                int curLength = response.Length - curPos;
+                if (curLength > 1024) curLength = 1024;
+                Byte[] frame = new Byte[curLength];
+                for (int i = 0; i < curLength; i++) frame[i] = response[i + curPos];
+                sendBuffer = sendBuffer.Concat(AEADEncrypt(frame, accToControlKey, fromUInt64cLE(accToControlNonce))).ToArray();
+                accToControlNonce = UInt64cInc(accToControlNonce);
+                curPos += curLength;           
+            }
+
+            AddToLogBox("Send Response: " + sendBuffer.Length + "\r\n");
+            AddToLogBox("accToControlNonce: " + accToControlNonce.hi.ToString() + accToControlNonce.lo.ToString() + "\r\n");
+
+            stream.Write(sendBuffer, 0, sendBuffer.Length);
         }
 
         void appendTLVBytes(ref Byte[] bytesIn, Byte TLVkey, Byte[] TLVValue)
@@ -791,7 +1101,7 @@ namespace HomeKit_Test
                 Status1.Text = TextIn;
             });
         }
-        private void sendHTTPResponse(NetworkStream senderStream, string status, string contentType = null, Byte[] data = null, int dataLength = 0)
+        Byte[] genHTTPResponse(NetworkStream senderStream, string status, string contentType = null, Byte[] data = null, int dataLength = 0)
         {
 
             String msg = "HTTP/1.1 " + status + " ";
@@ -828,6 +1138,16 @@ namespace HomeKit_Test
                     bytes = bytes.Concat(data).ToArray();
                 }
             }
+        
+            return bytes;
+
+        }
+
+
+        private void sendHTTPResponse(NetworkStream senderStream, string status, string contentType = null, Byte[] data = null, int dataLength = 0)
+        {
+
+            Byte[] bytes = genHTTPResponse(senderStream, status, contentType, data, dataLength);
 
             senderStream.Write(bytes, 0, bytes.Length);
 
@@ -835,6 +1155,7 @@ namespace HomeKit_Test
 
 
         }
+
         private int findTLVIndex(Byte[] data, int dataLength, Byte typeIn)
         {
             int i = 0;
@@ -1044,6 +1365,26 @@ namespace HomeKit_Test
         UInt64c UInt64cAdd(UInt64c x, UInt64c y, UInt64c z, UInt64c w, UInt64c v)
         {
             return UInt64cAdd(UInt64cAdd(x, y, z, w), v);
+        }
+
+        UInt64c UInt64cInc(UInt64c x)
+        {
+            x.lo++;
+            if (x.lo == 0x0) x.hi++;
+            return x;
+        }
+
+        UInt64c UInt64cAssign (UInt32 x)
+        {
+            UInt64c returnVal;
+            returnVal.lo = x;
+            returnVal.hi = 0;
+            return returnVal;
+        }
+
+        Byte[] fromUInt64cLE(UInt64c x)
+        {
+            return fromUInt32ArrayLE(new uint[] { x.lo, x.hi });
         }
         UInt64c UInt64cAnd(UInt64c x, UInt64c y)
         {
@@ -2308,6 +2649,47 @@ namespace HomeKit_Test
 
         }
 
+        bool AEADDecrypt(Byte[] msg, Byte[] key, UInt64c nonce, int start, int end, out Byte[] decrypted)
+        {
+            
+            return AEADDecrypt(msg, key, fromUInt64cLE(nonce), start, end, out decrypted);
+
+        }
+
+        bool AEADDecrypt(Byte[] msg, Byte[] key, Byte[] nonce, int start, int length, out Byte[] decrypted)
+        {
+
+            Byte[] aad = new Byte[start];
+            Byte[] result = new Byte[length - start - 16];
+            Byte[] authTag = new Byte[16];
+
+            for (int i = 0; i < start; i++) aad[i] = msg[i];
+            for (int i = 0; i < result.Length; i++) result[i] = msg[i+start];
+            for (int i = 0; i < 16; i++) authTag[i] = msg[length - 16 + i];
+
+            if (!verifyAuthTag(result, aad, authTag, key, nonce)) 
+            {
+                decrypted = null;
+                return false;
+            }
+
+            decrypted = chacha20(key, nonce, result, 1);
+            return true;
+        }
+
+        Byte[] AEADEncrypt(Byte[] msg, Byte[] key, Byte[] nonce)
+        {
+
+            Byte[] aad = new byte[2];
+            aad[0] = (byte)(msg.Length & 0xFF);
+            aad[1] = (byte)((msg.Length >> 8) & 0xFF);
+
+            Byte[] encData = chacha20(key, nonce, msg, 1);
+            Byte[] authTag = genAuthTag(encData, aad, key, nonce);
+
+            return aad.Concat(encData.Concat(authTag).ToArray()).ToArray();
+        }
+
         const int ed25519BitLength = 256;
 
         UInt32[] ed25519Bx = new UInt32[] { 0x216936d3, 0xcd6e53fe, 0xc0a4e231, 0xfdd6dc5c, 0x692cc760, 0x9525a7b2, 0xc9562d60, 0x8f25d51a };
@@ -2319,6 +2701,8 @@ namespace HomeKit_Test
         pointExtUInt32 ed25519G;
         UInt32[] ed25519p;
 
+        int32Array X25519a24;
+        
         void init_ed25519()
         {
             ed25519p = new UInt32[] { 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x80000000 };
@@ -2336,6 +2720,9 @@ namespace HomeKit_Test
             ed25519G.X.digits = ed25519recover_x(ed25519G.Y.digits, 0);
             ed25519G.Z.digits = new uint[] { 0x1 };
             ed25519G.T = int32ArrayMulMod(ed25519G.X, ed25519G.Y, ed25519p);
+
+            X25519a24.negative = false;
+            X25519a24.digits = new UInt32[] { 0x1db41 };
 
             //addBigIntToLogBox(ed25519G.X);
 
@@ -2773,6 +3160,102 @@ namespace HomeKit_Test
             x.negative = false;
             addBigIntToLogBox(x);
 
+        }
+
+        Byte[] X25519(Byte[] k_in, Byte[] u_in)
+        {
+
+            UInt32[] u = toUInt32ArrayLE(u_in);
+            UInt32[] k = toUInt32ArrayLE(k_in);
+
+            u[7] &= 0x7FFFFFFF;
+
+            k[0] &= 0xFFFFFFF8;
+            k[7] &= 0x7FFFFFFF;
+            k[7] |= 0x40000000;
+
+            int32Array x_1; x_1.negative = false; x_1.digits = u;
+            int32Array x_2; x_2.negative = false; x_2.digits = new UInt32[] { 0x1 };
+            int32Array z_2; z_2.negative = false; z_2.digits = new UInt32[] { 0x0 };
+            int32Array x_3; x_3.negative = false; x_3.digits = u;
+            int32Array z_3; z_3.negative = false; z_3.digits = new UInt32[] { 0x1 };
+            UInt32 swap = 0;
+
+            for (int i = 254; i >= 0; i--)
+            {
+                UInt32 k_t = (k[i / 32] >> (i % 32)) & 0x1;
+                swap ^= k_t;
+                cswap(swap, ref x_2.digits, ref x_3.digits);
+                cswap(swap, ref z_2.digits, ref z_3.digits);
+                swap = k_t;
+
+                int32Array A = int32ArrayAdd(x_2, z_2);
+                int32Array AA = int32ArrayMulMod(A, A, ed25519p);
+                int32Array B = int32ArraySub(x_2, z_2);
+                int32Array BB = int32ArrayMulMod(B, B, ed25519p);
+                int32Array E = int32ArraySub(AA, BB);
+                int32Array C = int32ArrayAdd(x_3, z_3);
+                int32Array D = int32ArraySub(x_3, z_3);
+                int32Array DA = int32ArrayMulMod(D, A, ed25519p);
+                int32Array CB = int32ArrayMulMod(C, B, ed25519p);
+                int32Array DApCB = int32ArrayAdd(DA, CB);
+                int32Array DAmCB = int32ArraySub(DA, CB);
+                x_3 = int32ArrayMulMod(DApCB, DApCB, ed25519p);
+                z_3 = int32ArrayMulMod(x_1, int32ArrayMulMod(DAmCB, DAmCB, ed25519p), ed25519p);
+                x_2 = int32ArrayMulMod(AA, BB, ed25519p);
+                z_2 = int32ArrayMulMod(E, int32ArrayAdd(int32ArrayMul(X25519a24, E), AA), ed25519p);
+            }
+
+            cswap(swap, ref x_2.digits, ref x_3.digits);
+            cswap(swap, ref z_2.digits, ref z_3.digits);
+
+            UInt32[] result = UInt32ArrayMulMod(x_2.digits, UInt32PowModMonty(z_2.digits, UInt32ArraySubSimple(ed25519p, new UInt32[] { 0x02 }), ed25519p), ed25519p);
+            result[7] &= 0x7FFFFFFF;
+
+            return fromUInt32ArrayLE(result);
+
+        }
+
+        void cswap(UInt32 swap, ref UInt32[] x_2, ref UInt32[] x_3)
+        {
+            UInt32[] temp = new UInt32[8];
+            for (int i = 0; i < x_2.Length; i++) temp[i] = x_2[i];
+            x_2 = temp;
+
+            temp = new UInt32[8];
+            for (int i = 0; i < x_3.Length; i++) temp[i] = x_3[i];
+            x_3 = temp;
+
+
+            if (swap != 0)
+            {
+                for (int i = 0; i < 8; i++)
+                {
+                    UInt32 dummy = x_2[i] ^ x_3[i];
+                    x_2[i] ^= dummy;
+                    x_3[i] ^= dummy;
+                }
+            }
+            return;
+        }
+
+        Byte[] c25519Public(Byte[] secret)
+        {
+            Byte[] nine = new byte[32];
+            nine[0] = 9;
+            return X25519(secret, nine);
+
+        }    
+
+        Byte[] c25519Shared(Byte[] secret, Byte[] pubKey)
+        {
+            return X25519(secret, pubKey);
+        }
+
+        void addBytesToLogBox(Byte[] x)
+        {
+            for (int i = 0; i < x.Length; i++) AddToLogBox(x[i].ToString("X2"));
+            AddToLogBox("\r\n");
         }
     }
 }

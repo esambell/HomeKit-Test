@@ -1,2 +1,3 @@
 
-print (d)
+
+print (0^3)

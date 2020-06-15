@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "InverseFinder", "InverseFin
 EndProject
 Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "Ed25519", "Ed25519\Ed25519.pyproj", "{A9E4C73F-97A5-49B9-A10E-292A1FB07CFA}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "chachaPolyTest", "chachaPolyTest\chachaPolyTest.csproj", "{EA362CD9-A070-4EC7-84FE-FF5C1B4A515F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -25,6 +27,10 @@ Global
 		{4ED703D4-A29B-48A5-ABA0-DC22BC5FD175}.Release|Any CPU.Build.0 = Release|Any CPU
 		{A9E4C73F-97A5-49B9-A10E-292A1FB07CFA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{A9E4C73F-97A5-49B9-A10E-292A1FB07CFA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EA362CD9-A070-4EC7-84FE-FF5C1B4A515F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EA362CD9-A070-4EC7-84FE-FF5C1B4A515F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EA362CD9-A070-4EC7-84FE-FF5C1B4A515F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EA362CD9-A070-4EC7-84FE-FF5C1B4A515F}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

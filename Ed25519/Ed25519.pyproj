@@ -4,7 +4,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>a9e4c73f-97a5-49b9-a10e-292a1fb07cfa</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>Ed25519.py</StartupFile>
+    <StartupFile>X25519.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
@@ -26,6 +26,7 @@
     <Compile Include="module1.py">
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="X25519.py" />
   </ItemGroup>
   <ItemGroup>
     <InterpreterReference Include="Global|PythonCore|3.7" />
