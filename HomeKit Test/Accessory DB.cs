@@ -14,7 +14,7 @@
                             ""characteristics"" : [
                                 {
                                     ""type"" : ""23"",
-                                    ""value"" : ""Test HAP"",
+                                    ""value"" : ""TestHAP"",
                                     ""perms"" : [ ""pr"" ],
                                     ""format"" : ""string"",
                                     ""iid"" : 2
@@ -42,7 +42,6 @@
                                 },
                                 {
                                     ""type"" : ""14"",
-                                    ""value"" : null,
                                     ""perms"" : [ ""pw"" ],
                                     ""format"" : ""bool"",
                                     ""iid"" : 6
@@ -55,52 +54,62 @@
                                     ""iid"" : 7
                                 },
                                 {
-                                    ""type"" : ""A6"",
-                                    ""value"" : 0,
+                                    ""type"" : ""53"",
+                                    ""value"" : ""100.1.1"",
                                     ""perms"" : [ ""pr"" ],
-                                    ""format"" : ""unit32"",
-                                    ""iid"" : 7
+                                    ""format"" : ""string"",
+                                    ""iid"" : 8
+                                },
+                                {
+                                    ""type"" : ""34AB8811-AC7F-4340-BAC3-FD6A85F9943B"",
+                                    ""value"" : ""Internal"",
+                                    ""perms"" : [ ""pr"" ],
+                                    ""format"" : ""string"",
+                                    ""iid"" : 9
                                 }
+                                    
                             ]
                         },
                         {
                             ""type"" : ""A2"",
-                            ""iid"" : 8,
+                            ""iid"" : 10,
                             ""characteristics"" : [
                                 {
                                     ""type"" : ""37"",
                                     ""value"" : ""1.1.0"",
                                     ""perms"" : [ ""pr"" ],
                                     ""format"" : ""string"",
-                                    ""iid"" : 9
+                                    ""iid"" : 11
                                 }
                             ]
                         },
                         {
                             ""type"" : ""47"",
-                            ""iid"" : 10,
+                            ""iid"" : 12,
+                            ""primary"" : true, 
                             ""characteristics"" : [
                                 {
                                     ""type"" : ""25"",
                                     ""value"" : false,
                                     ""perms"" : [ ""pr"", ""pw"" ],
                                     ""format"" : ""bool"",
-                                    ""iid"" : 11
+                                    ""iid"" : 13
                                 },
                                 {
                                     ""type"" : ""23"",
                                     ""value"" : ""Button"",
                                     ""perms"" : [ ""pr""],
                                     ""format"" : ""string"",
-                                    ""iid"" : 12
+                                    ""iid"" : 14
                                 },
                                 {
                                     ""type"" : ""26"",
-                                    ""value"" : true,
-                                    ""perms"" : [ ""pr""],
+                                    ""value"" : false,
+                                    ""perms"" : [ ""pr"" ],
                                     ""format"" : ""bool"",
-                                    ""iid"" : 13
+                                    ""iid"" : 15
                                 }
+                                
                             ]
                         }
                     ]
@@ -119,7 +128,7 @@
                             ""characteristics"" : [
                                 {
                                     ""type"" : ""23"",
-                                    ""value"" : ""Acme Light Bridge"",
+                                    ""value"" : ""TestHAP"",
                                     ""perms"" : [ ""pr"" ],
                                     ""format"" : ""string"",
                                     ""iid"" : 2

@@ -122,9 +122,18 @@ namespace HomeKit_Test
         const byte cfgDeviceLTPK = 0x00;
         const byte cfgDevicePairingID = 0x01;
         const byte cfgAccessoryLTSK = 0x02;
+        const byte cfgPermissions = 0x03;
 
-        Byte[] dataDeviceLTPK = new byte[0];
-        Byte[] dataDevicePairingID = new byte[0];
+        struct pairing
+        {
+            public Byte[] dataDeviceLTPK;
+            public Byte[] dataDevicePairingID;
+            public Byte dataPermissions;
+        }
+
+        pairing[] pairings = new pairing[16];
+        
+        
         Byte[] dataAccessoryLTSK = new byte[] {0x9d, 0x61, 0xb1, 0x9d, 0xef, 0xfd, 0x5a, 0x60, 0xba, 0x84, 0x4a, 0xf4, 0x92, 0xec, 0x2c, 0xc4,
                                         0x44, 0x49, 0xc5, 0x69, 0x7b, 0x32, 0x69, 0x19, 0x70, 0x3b, 0xac, 0x03, 0x1c, 0xae, 0x7f, 0x60};
         string dataPairingID = "12:13:12:12:13:13";
@@ -174,11 +183,12 @@ namespace HomeKit_Test
 
             var sd = new ServiceDiscovery(mdns);
 
-            var za = new ServiceProfile("Test HAP", "_hap._tcp", DevicePort);
+            var za = new ServiceProfile("TestHAP", "_hap._tcp", DevicePort);
             za.AddProperty("c#", "15");
             za.AddProperty("ff", "0");
             za.AddProperty("id", dataPairingID);
             za.AddProperty("md", "Device1,1");
+            za.AddProperty("s#", "1");
             za.AddProperty("sf", "1");
             za.AddProperty("ci", "7");
             za.AddProperty("pv", "1.1");
@@ -408,6 +418,7 @@ namespace HomeKit_Test
             while (true)
             {
                 TcpClient client = server.AcceptTcpClient();
+                AddToLogBox(client.Client.RemoteEndPoint.ToString() + "\r\n");
                 data = null;
 
                 int i;
@@ -505,7 +516,7 @@ namespace HomeKit_Test
                         {
                             Byte[] msg;
 
-                            if (AEADDecrypt(bytes, controlToAccKey, controlToAccNonce, 2, encDataReceived, out msg))
+                            if (AEADDecrypt(bytes, controlToAccKey, controlToAccNonce, encDataReceived, out msg))
                             {
                                 AddToLogBox(Encoding.UTF8.GetString(msg) + "\r\n");
                                 controlToAccNonce = UInt64cInc(controlToAccNonce);
@@ -531,7 +542,7 @@ namespace HomeKit_Test
                                 Byte[] contentBytes = new Byte[contentLength];
 
                                 int contentStart = 0;
-                                for (int j=0; i< msg.Length-4;i++)
+                                for (int j=0; j< msg.Length-4;j++)
                                 {
                                     if ((msg[j] == 0x0d) && (msg[j + 1] == 0x0a) && (msg[j + 2] == 0x0d) && (msg[j + 3] == 0x0a))
                                     {
@@ -545,7 +556,7 @@ namespace HomeKit_Test
                                 }
 
                                 processHTTP(stream, requestType, uri, contentBytes, contentLength, ref curMethod);
-
+                                encDataReceived = 0;
 
 
                             }
@@ -711,16 +722,18 @@ namespace HomeKit_Test
 
                                                 subTLV = chacha20(chachaKey, nonce, subTLV, 1);
 
-                                                dataDevicePairingID = findTLVKey(subTLV, 0x01, subTLV.Length);
-                                                dataDeviceLTPK = findTLVKey(subTLV, 0x03, subTLV.Length);
+                                                pairings[0].dataDevicePairingID = findTLVKey(subTLV, 0x01, subTLV.Length);
+                                                pairings[0].dataDeviceLTPK = findTLVKey(subTLV, 0x03, subTLV.Length);
                                                 Byte[] deviceSignature = findTLVKey(subTLV, 0x0a, subTLV.Length);
 
+                                                pairings[0].dataPermissions = 0x01;
+
                                                 Byte[] deviceX = genHKDFSHA512(fromUInt32Array(storedK), "Pair-Setup-Controller-Sign-Salt", "Pair-Setup-Controller-Sign-Info", 32);
-                                                Byte[] deviceInfo = deviceX.Concat(dataDevicePairingID).Concat(dataDeviceLTPK).ToArray();
+                                                Byte[] deviceInfo = deviceX.Concat(pairings[0].dataDevicePairingID).Concat(pairings[0].dataDeviceLTPK).ToArray();
 
-                                                AddToLogBox(Encoding.UTF8.GetString(dataDevicePairingID) + "\r\n");
+                                                AddToLogBox(Encoding.UTF8.GetString(pairings[0].dataDevicePairingID) + "\r\n");
 
-                                                bool result = ed25519verify(dataDeviceLTPK, deviceInfo, deviceSignature);
+                                                bool result = ed25519verify(pairings[0].dataDeviceLTPK, deviceInfo, deviceSignature);
                                                 AddToLogBox(result.ToString() + "\r\n");
 
                                                 writeCfg();
@@ -831,13 +844,13 @@ namespace HomeKit_Test
 
                                                 AddToLogBox("receivedPairingID\r\n");
                                                 addBytesToLogBox(receivedPairingID);
-                                                addBytesToLogBox(dataDevicePairingID);
+                                                addBytesToLogBox(pairings[0].dataDevicePairingID);
 
                                                 Byte[] deviceInfo = devicePublicKey;
                                                 deviceInfo = deviceInfo.Concat(receivedPairingID).ToArray();
                                                 deviceInfo = deviceInfo.Concat(accessoryPublicKey).ToArray();
 
-                                                bool result = ed25519verify(dataDeviceLTPK, deviceInfo, receivedSignature);
+                                                bool result = ed25519verify(pairings[0].dataDeviceLTPK, deviceInfo, receivedSignature);
                                                 AddToLogBox("Verify M3 signature status: " + result);
                                                 if (!result)
                                                 {
@@ -865,6 +878,97 @@ namespace HomeKit_Test
                                     break;
 
                                 }
+                            case "/pairings":
+                                {
+                                    Byte[] TLVMethod = findTLVKey(bytes, 0x00, dataBytesReceived);
+                                    if (TLVMethod == null || TLVMethod.Length == 0) break;
+                                    curMethod = TLVMethod[0];
+                                    AddToLogBox("Pairing Method: " + curMethod + "\r\n");
+
+                                    switch (curMethod)
+                                    {
+                                        case 0x03:
+                                            {
+                                                AddToLogBox("Add Pairing\r\n");
+                                                Byte[] pairingID = TLVMethod = findTLVKey(bytes, 0x01, dataBytesReceived);
+                                                Byte[] pairingLTPK = TLVMethod = findTLVKey(bytes, 0x03, dataBytesReceived);
+                                                Byte[] pairingPermissions = TLVMethod = findTLVKey(bytes, 0x0B, dataBytesReceived);
+
+                                                AddToLogBox("Pairing Permissions: " + pairingPermissions[0].ToString() + "\r\n");
+
+                                                Byte[] response = new byte[0];
+                                                appendTLVBytes(ref response, 0x06, new byte[] { 0x02 });
+
+                                                int pairingIndex = findPairingIdIndex(pairingID);
+                                                if (pairingIndex != -1)
+                                                {
+                                                    if (byteArrayEqual(pairingLTPK, pairings[pairingIndex].dataDeviceLTPK))
+                                                    {
+                                                        pairings[pairingIndex].dataPermissions = pairingPermissions[0];
+                                                        AddToLogBox("Pairing " + pairingIndex + " Updated\r\n");
+                                                        break;
+                                                    }
+                                                    else
+                                                    {
+                                                        appendTLVBytes(ref response, 0x07, new byte[] { 0x01 });
+                                                        sendHAPResponse(stream, "200", response);
+                                                        AddToLogBox("Pairing " + pairingIndex + " LTPK Error\r\n");
+                                                        break;
+                                                    }
+
+
+                                                }
+
+                                                pairingIndex = findEmptyPairingIdIndex();
+                                                if (pairingIndex == -1)
+                                                {
+                                                    appendTLVBytes(ref response, 0x07, new byte[] { 0x04 });
+                                                    sendHAPResponse(stream, "200", response);
+                                                    AddToLogBox("Too many pairings\r\n");
+                                                    break;
+                                                }
+
+                                                pairings[pairingIndex].dataDevicePairingID = pairingID;
+                                                pairings[pairingIndex].dataDeviceLTPK = pairingLTPK;
+                                                pairings[pairingIndex].dataPermissions = pairingPermissions[0];
+
+                                                AddToLogBox("Pairing " + pairingIndex + " Added\r\n");
+                                                sendHAPResponse(stream, "200", response);
+
+                                                break;
+                                            }
+                                        case 0x04:
+                                            {
+                                                AddToLogBox("Remove Pairing\r\n");
+
+                                                Byte[] pairingID = TLVMethod = findTLVKey(bytes, 0x01, dataBytesReceived);
+                                                addBytesToLogBox(pairingID);
+                                                int pairingIndex = findPairingIdIndex(pairingID);
+                                                AddToLogBox("Pairing Index: " + pairingIndex.ToString() + " Removed\r\n");
+                                                pairings[pairingIndex].dataDevicePairingID = null;
+                                                pairings[pairingIndex].dataDeviceLTPK = null;
+                                                pairings[pairingIndex].dataPermissions = 0;
+
+                                                Byte[] response = new Byte[0];
+                                                appendTLVBytes(ref response, 0x06, new byte[] { 0x02 });
+
+                                                sendHAPResponse(stream, "200", response);
+
+
+                                                break;
+                                            }
+                                        case 0x05:
+                                            {
+                                                AddToLogBox("List Pairings\r\n");
+                                                break;
+                                            }
+                                    }
+
+
+
+
+                                    break;
+                                }
 
                         }
 
@@ -876,15 +980,68 @@ namespace HomeKit_Test
                         {
                             case "/accessories":
                                 {
-                                    sendHAPResponse(stream, "200", Encoding.UTF8.GetBytes(constants.constants.accDBtest));
+                                    sendHAPResponse(stream, "200", Encoding.UTF8.GetBytes(constants.constants.accDB), true);
+                                    //sendHAPResponse(stream, "200", Encoding.UTF8.GetBytes("fuck"), true);
+                                    break;
+                                }
+                        }
+
+
+                        break;
+                    }
+                case "PUT":
+                    {
+                        switch (uri)
+                        {
+
+
+                            case "/characteristics":
+                                {
+                                    string jsonString = Encoding.UTF8.GetString(bytes) ;
+                                    AddToLogBox("jsonString:\r\n" + jsonString + "\r\n");
+
+                                    int curPos = jsonString.IndexOf("[");
+                                    int openBrackets;
+
+                                    while (curPos < jsonString.Length)
+                                    {
+                                        int startPos = curPos + 1;
+                                        openBrackets = 0;
+                                        do
+                                        {
+                                            if (jsonString[curPos].Equals("{")) openBrackets++;
+                                            if (jsonString[curPos].Equals("}")) openBrackets--;
+                                            if (openBrackets < 0) break;
+                                           
+                                        } while (openBrackets != 0);
+                                        if (openBrackets < 0)
+                                        {
+                                            AddToLogBox("JSON Parse Error\r\n");
+                                            break;
+                                        }
+                                        int curLength = curPos - startPos);
+
+                                        int keyPos = jsonString.IndexOf(@"""aid""", startPos, curLength);
+                                        keyPos = jsonString.IndexOf(":", keyPos, keyP)
+
+
+
+                                    }
+
                                     break;
                                 }
                         }
                         
-                        
                         break;
                     }
             }
+
+        }
+
+        String jsonGetValue(string jsonString, string key, int curPos, int curLength)
+        {
+
+            return "foo";
 
         }
 
@@ -897,11 +1054,42 @@ namespace HomeKit_Test
         {
             Byte[] toWrite = new byte[0];
 
-            toWrite = toWrite.Concat(genCfgItem(cfgDeviceLTPK, dataDeviceLTPK)).ToArray();
-            toWrite = toWrite.Concat(genCfgItem(cfgDevicePairingID, dataDevicePairingID)).ToArray();
+            for (int i =0; i< pairings.Length; i++)
+            {
+                if (pairings[i].dataDeviceLTPK != null && pairings[i].dataDevicePairingID != null)
+                {
+                    toWrite = toWrite.Concat(genCfgItem(cfgDeviceLTPK, pairings[i].dataDeviceLTPK)).ToArray();
+                    toWrite = toWrite.Concat(genCfgItem(cfgDevicePairingID, pairings[i].dataDevicePairingID)).ToArray();
+                    toWrite = toWrite.Concat(genCfgItem(cfgPermissions, pairings[i].dataPermissions)).ToArray();
+                }
+            }
+       
             toWrite = toWrite.Concat(genCfgItem(cfgAccessoryLTSK, dataAccessoryLTSK)).ToArray();
 
             File.WriteAllBytes(cfgFile, toWrite);
+        }
+
+        int findPairingIdIndex(Byte[] pairingID)
+        {
+            for( int i = 0; i< pairings.Length; i++)
+            {
+                if (pairings[i].dataDevicePairingID != null && byteArrayEqual(pairings[i].dataDevicePairingID, pairingID)) return i;
+            }
+            return -1;
+        }
+
+        int findEmptyPairingIdIndex()
+        {
+            for (int i = 0; i < pairings.Length; i++)
+            {
+                if (pairings[i].dataDevicePairingID == null) return i;
+            }
+            return -1;
+        }
+
+        Byte[] genCfgItem (Byte cfgID, Byte data)
+        {
+            return genCfgItem(cfgID, new Byte[] { data });
         }
 
         Byte[] genCfgItem(Byte cfgID, Byte[] data)
@@ -950,7 +1138,7 @@ namespace HomeKit_Test
             if (aad.Length % 16 != 0) mac = mac.Concat(new Byte[16 - (aad.Length % 16)]).ToArray();
 
             mac = mac.Concat(msg).ToArray();
-            if (msg.Length % 16 != 0) mac = msg.Concat(new Byte[16 - (msg.Length % 16)]).ToArray();
+            if (msg.Length % 16 != 0) mac = mac.Concat(new Byte[16 - (msg.Length % 16)]).ToArray();
             
             mac = mac.Concat(fromUInt32ArrayLE(new UInt32[] { (UInt32)aad.Length, 0x0 })).ToArray();
             mac = mac.Concat(fromUInt32ArrayLE(new UInt32[] { (UInt32)msg.Length, 0x0 })).ToArray();
@@ -989,11 +1177,11 @@ namespace HomeKit_Test
             sendHAPResponse(stream, responseCode, new Byte[0]);
             return;
         }
-        void sendHAPResponse(NetworkStream stream, String responseCode, Byte[] responseBytes = null)
+        void sendHAPResponse(NetworkStream stream, String responseCode, Byte[] responseBytes = null, bool chunked = false)
         {
 
             Byte[] response;
-            if (responseBytes != null && responseBytes.Length > 0) response = genHTTPResponse(stream, responseCode, "application/hap+json", responseBytes, responseBytes.Length);
+            if (responseBytes != null && responseBytes.Length > 0) response = genHTTPResponse(stream, responseCode, "application/hap+json", responseBytes, responseBytes.Length, chunked);
             else response = genHTTPResponse(stream, responseCode);
 
             Byte[] sendBuffer = new Byte[0];
@@ -1005,15 +1193,48 @@ namespace HomeKit_Test
                 if (curLength > 1024) curLength = 1024;
                 Byte[] frame = new Byte[curLength];
                 for (int i = 0; i < curLength; i++) frame[i] = response[i + curPos];
-                sendBuffer = sendBuffer.Concat(AEADEncrypt(frame, accToControlKey, fromUInt64cLE(accToControlNonce))).ToArray();
+                if (true)
+                {
+
+                    sendBuffer = sendBuffer.Concat(AEADEncrypt(frame, accToControlKey, fromUInt64cLE(accToControlNonce))).ToArray();
+                    //Byte[] tempBuffer = AEADEncrypt(frame, accToControlKey, fromUInt64cLE(accToControlNonce));
+                    //stream.Write(tempBuffer, 0, tempBuffer.Length);
+
+                }
+                else
+                {
+                    sendBuffer = sendBuffer.Concat(AEADEncrypt(frame, controlToAccKey, fromUInt64cLE(controlToAccNonce))).ToArray();
+                    AddToLogBox("Skipped Nonce\r\n");
+                }
                 accToControlNonce = UInt64cInc(accToControlNonce);
                 curPos += curLength;           
             }
 
             AddToLogBox("Send Response: " + sendBuffer.Length + "\r\n");
             AddToLogBox("accToControlNonce: " + accToControlNonce.hi.ToString() + accToControlNonce.lo.ToString() + "\r\n");
-
+            //AddToLogBox(Encoding.UTF8.GetString(response) + "\r\n");
             stream.Write(sendBuffer, 0, sendBuffer.Length);
+
+            Byte[] decrypted;
+            UInt32 tempNonce = 0;
+            curPos = 0;
+            while (curPos < sendBuffer.Length)
+            {
+                int curLength = sendBuffer[curPos] + sendBuffer[curPos + 1] * 0x100;
+                Byte[] tempBuffer = new byte[curLength + 18];
+                for (int i = 0; i < curLength + 18; i++) tempBuffer[i] = sendBuffer[i + curPos];
+                UInt64c tempNonce64;
+                tempNonce64.lo = tempNonce; tempNonce64.hi = 0;
+                Byte[] tempResponse;
+                bool testResult = AEADDecrypt(tempBuffer, accToControlKey, tempNonce64, curLength + 2 + 16, out tempResponse);
+                AddToLogBox(testResult.ToString() + " Nonce: " + tempNonce.ToString() + " Length: " + curLength.ToString() + " Position: " + curPos.ToString() + " \r\n");
+                tempNonce++;
+                curPos += curLength + 18;
+
+            }
+            AddToLogBox("\r\n");
+
+
         }
 
         void appendTLVBytes(ref Byte[] bytesIn, Byte TLVkey, Byte[] TLVValue)
@@ -1101,7 +1322,7 @@ namespace HomeKit_Test
                 Status1.Text = TextIn;
             });
         }
-        Byte[] genHTTPResponse(NetworkStream senderStream, string status, string contentType = null, Byte[] data = null, int dataLength = 0)
+        Byte[] genHTTPResponse(NetworkStream senderStream, string status, string contentType = null, Byte[] data = null, int dataLength = 0, bool chunked = false)
         {
 
             String msg = "HTTP/1.1 " + status + " ";
@@ -1115,11 +1336,15 @@ namespace HomeKit_Test
                     break;
             }
             msg += "\r\n";
+            if (chunked)
+            {
+                msg += "Transfer-Encoding: chunked\r\n";
+            }
             if (!(contentType is null))
             {
                 msg += "Content-Type: " + contentType + "\r\n";
             }
-            if (dataLength != 0)
+            if (dataLength != 0 && !chunked)
             {
                 msg += "Content-Length: " + dataLength.ToString() + "\r\n";
             }
@@ -1131,12 +1356,16 @@ namespace HomeKit_Test
             {
                 if (dataLength != 0)
                 {
+                    if (chunked) bytes = bytes.Concat(Encoding.UTF8.GetBytes(dataLength.ToString("X") + "\r\n")).ToArray();
                     bytes = bytes.Concat(data.Take(dataLength)).ToArray();
                 }
                 else
                 {
+                    if (chunked) bytes = bytes.Concat(Encoding.UTF8.GetBytes(data.Length.ToString("X") + "\r\n")).ToArray();
                     bytes = bytes.Concat(data).ToArray();
                 }
+                if (chunked) bytes = bytes.Concat(Encoding.UTF8.GetBytes("\r\n0\r\n\r\n")).ToArray();
+
             }
         
             return bytes;
@@ -2649,22 +2878,22 @@ namespace HomeKit_Test
 
         }
 
-        bool AEADDecrypt(Byte[] msg, Byte[] key, UInt64c nonce, int start, int end, out Byte[] decrypted)
+        bool AEADDecrypt(Byte[] msg, Byte[] key, UInt64c nonce, int end, out Byte[] decrypted)
         {
             
-            return AEADDecrypt(msg, key, fromUInt64cLE(nonce), start, end, out decrypted);
+            return AEADDecrypt(msg, key, fromUInt64cLE(nonce), end, out decrypted);
 
         }
 
-        bool AEADDecrypt(Byte[] msg, Byte[] key, Byte[] nonce, int start, int length, out Byte[] decrypted)
+        bool AEADDecrypt(Byte[] msg, Byte[] key, Byte[] nonce, int length, out Byte[] decrypted)
         {
 
-            Byte[] aad = new Byte[start];
-            Byte[] result = new Byte[length - start - 16];
+            Byte[] aad = new Byte[2];
+            Byte[] result = new Byte[length - 2 - 16];
             Byte[] authTag = new Byte[16];
 
-            for (int i = 0; i < start; i++) aad[i] = msg[i];
-            for (int i = 0; i < result.Length; i++) result[i] = msg[i+start];
+            for (int i = 0; i < 2; i++) aad[i] = msg[i];
+            for (int i = 0; i < result.Length; i++) result[i] = msg[i+2];
             for (int i = 0; i < 16; i++) authTag[i] = msg[length - 16 + i];
 
             if (!verifyAuthTag(result, aad, authTag, key, nonce)) 
