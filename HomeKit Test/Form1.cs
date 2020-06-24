@@ -37,6 +37,8 @@ using System.Net.Configuration;
 using System.Runtime.InteropServices.WindowsRuntime;
 using constants;
 using System.Runtime.InteropServices;
+using System.Threading;
+using System.Net.Mime;
 
 namespace HomeKit_Test
 {
@@ -142,10 +144,13 @@ namespace HomeKit_Test
         const int DevicePort = 5252;
         const string DeviceCode = "143-83-105";
         const Byte generator = 5;
+        UInt32 configNum = 15;
         UInt32[] g = { generator };
         Random random = new Random();
         String userName = "Pair-Setup";
         MulticastService mdns;
+        ServiceDiscovery sd;
+        ServiceProfile za;
 
         bool paired = false;
 
@@ -158,6 +163,7 @@ namespace HomeKit_Test
         Byte[] sharedKey;
         UInt64c accToControlNonce;
         UInt64c controlToAccNonce;
+        bool evAccessoryFlagEnabled = false;
 
 
         public Form1()
@@ -181,10 +187,10 @@ namespace HomeKit_Test
             mdns.UseIpv4 = true;
             mdns.UseIpv6 = false;
 
-            var sd = new ServiceDiscovery(mdns);
+            sd = new ServiceDiscovery(mdns);
 
-            var za = new ServiceProfile("TestHAP", "_hap._tcp", DevicePort);
-            za.AddProperty("c#", "15");
+            za = new ServiceProfile("TestHAP", "_hap._tcp", DevicePort);
+            za.AddProperty("c#", configNum.ToString());
             za.AddProperty("ff", "0");
             za.AddProperty("id", dataPairingID);
             za.AddProperty("md", "Device1,1");
@@ -193,8 +199,10 @@ namespace HomeKit_Test
             za.AddProperty("ci", "7");
             za.AddProperty("pv", "1.1");
             sd.Advertise(za);
+            
 
             mdns.Start();
+            sd.Announce(za);
            
             TCPListenerTask.RunWorkerAsync();
 
@@ -405,7 +413,7 @@ namespace HomeKit_Test
 
             return InterfacesOut;
         }
-
+        bool queueAccessoryFlageEvent = false;
         private void TCPListenerTask_DoWork(object sender, DoWorkEventArgs e)
         {
             TcpListener server = new TcpListener(IPAddress.Any, DevicePort);
@@ -419,6 +427,21 @@ namespace HomeKit_Test
             {
                 TcpClient client = server.AcceptTcpClient();
                 AddToLogBox(client.Client.RemoteEndPoint.ToString() + "\r\n");
+
+                if (client.Client.RemoteEndPoint.AddressFamily == AddressFamily.InterNetwork)
+                {
+                    IPAddress curIP = ((IPEndPoint)client.Client.RemoteEndPoint).Address;
+                    AddToLogBox(curIP.ToString() + "\r\n");
+                    if (!curIP.Equals(IPAddress.Parse("192.168.1.67")))
+                    {
+                        client.Close();
+                        continue;
+                    }
+
+
+                }
+
+
                 data = null;
 
                 int i;
@@ -427,6 +450,9 @@ namespace HomeKit_Test
                 {
                     label1.Text = numConnects.ToString();
                 });
+
+                
+
                 NetworkStream stream = client.GetStream();
                 String request = null;
                 bool isLineBlank = true;
@@ -589,6 +615,14 @@ namespace HomeKit_Test
 
         void processHTTP(NetworkStream stream, String requestType, String uri, Byte[] bytes, int dataBytesReceived, ref Byte curMethod)
         {
+            int queryStringPos;
+            string queryString = "";
+            if ((queryStringPos = uri.IndexOf('?')) != -1)
+            {
+                queryString = uri.Substring(queryStringPos + 1, uri.Length - queryStringPos - 1);
+                uri = uri.Substring(0, queryStringPos);
+            }
+
             switch (requestType)
             {
                 case "POST":
@@ -768,6 +802,12 @@ namespace HomeKit_Test
                                                 AddToLogBox(verifyAuthTag(encData, authTag, chachaKey, nonce).ToString() + "\r\n");
 
                                                 AddToLogBox("Reached Level 5\r\n");
+
+                                                updateBonjourFlag("sf","0");
+                                                //updateBonjourFlag("c#", (++configNum).ToString());
+
+                                                sd.Announce(za);
+
                                                 break;
                                             }
 
@@ -890,11 +930,14 @@ namespace HomeKit_Test
                                         case 0x03:
                                             {
                                                 AddToLogBox("Add Pairing\r\n");
-                                                Byte[] pairingID = TLVMethod = findTLVKey(bytes, 0x01, dataBytesReceived);
-                                                Byte[] pairingLTPK = TLVMethod = findTLVKey(bytes, 0x03, dataBytesReceived);
-                                                Byte[] pairingPermissions = TLVMethod = findTLVKey(bytes, 0x0B, dataBytesReceived);
+                                                Byte[] pairingID = findTLVKey(bytes, 0x01, dataBytesReceived);
+                                                Byte[] pairingLTPK = findTLVKey(bytes, 0x03, dataBytesReceived);
+                                                Byte[] pairingPermissions = findTLVKey(bytes, 0x0B, dataBytesReceived);
 
+                                                addBytesToLogBox(pairingID);
+                                                AddToLogBox("\r\n");
                                                 AddToLogBox("Pairing Permissions: " + pairingPermissions[0].ToString() + "\r\n");
+
 
                                                 Byte[] response = new byte[0];
                                                 appendTLVBytes(ref response, 0x06, new byte[] { 0x02 });
@@ -906,6 +949,7 @@ namespace HomeKit_Test
                                                     {
                                                         pairings[pairingIndex].dataPermissions = pairingPermissions[0];
                                                         AddToLogBox("Pairing " + pairingIndex + " Updated\r\n");
+                                                        sendHAPResponse(stream, "200", response);
                                                         break;
                                                     }
                                                     else
@@ -933,7 +977,7 @@ namespace HomeKit_Test
                                                 pairings[pairingIndex].dataPermissions = pairingPermissions[0];
 
                                                 AddToLogBox("Pairing " + pairingIndex + " Added\r\n");
-                                                sendHAPResponse(stream, "200", response);
+                                                sendHAPResponse(stream, "200", response, contentType: "application/pairing+tlv8");
 
                                                 break;
                                             }
@@ -952,7 +996,7 @@ namespace HomeKit_Test
                                                 Byte[] response = new Byte[0];
                                                 appendTLVBytes(ref response, 0x06, new byte[] { 0x02 });
 
-                                                sendHAPResponse(stream, "200", response);
+                                                sendHAPResponse(stream, "200", response, contentType: "application/pairing+tlv8");
 
 
                                                 break;
@@ -969,6 +1013,11 @@ namespace HomeKit_Test
 
                                     break;
                                 }
+                            case "/identify":
+                                {
+                                    if (!Identify.IsBusy) Identify.RunWorkerAsync(); 
+                                    break;
+                                }
 
                         }
 
@@ -976,12 +1025,77 @@ namespace HomeKit_Test
                     }
                 case "GET":
                     {
+                        
                         switch (uri)
                         {
                             case "/accessories":
                                 {
                                     sendHAPResponse(stream, "200", Encoding.UTF8.GetBytes(constants.constants.accDB), true);
                                     //sendHAPResponse(stream, "200", Encoding.UTF8.GetBytes("fuck"), true);
+
+                                    
+
+                                    break;
+                                }
+                            case "/characteristics":
+                                {
+
+                                    string response = null;
+                                    bool hasErrors = false;
+                                    bool fatalError = false;
+                                    string fatalErrorCode = null;
+
+                                    int curPos = queryString.IndexOf("id=") + 3;
+                                    int queryLength;
+                                    if ((queryLength = queryString.IndexOf('&', curPos)) == -1) queryLength = queryString.Length; 
+                                    int curEnd;
+                                    
+                                    while (curPos < queryLength)
+                                    {
+                                        
+                                        if ((curEnd = queryString.IndexOf(',', curPos)) == -1) curEnd = queryLength;
+                                        int decimalPos = queryString.IndexOf('.', curPos, curEnd - curPos);
+                                        if (decimalPos == -1)
+                                        {
+                                            fatalError = true;
+                                            fatalErrorCode = "400";
+                                            break;
+                                        }
+
+                                        int aid = int.Parse(queryString.Substring(curPos, decimalPos - curPos));
+                                        int iid = int.Parse(queryString.Substring(decimalPos + 1, curEnd - decimalPos - 1));
+
+
+                                        if (response == null) response = @"{""characteristics"" : [";
+                                        else response += ",";
+
+                                        response += genGetCharacteristicResponse(aid, iid, ref hasErrors);
+                                        curPos = curEnd;
+
+                                    }
+                                    
+                                    response += "]}";
+                                    
+                                    if (fatalError)
+                                    {
+                                        sendHAPResponse(stream, fatalErrorCode);
+                                    }
+
+                                    else if (hasErrors)
+                                    {
+                                        sendHAPResponse(stream, "207", Encoding.UTF8.GetBytes(response));
+                                        AddToLogBox("Error:\r\n" + response + "\r\n");
+                                    }
+                                    else
+                                    {
+
+                                        response = response.Replace(@", ""status"" : 0", "");
+                                        sendHAPResponse(stream, "200", Encoding.UTF8.GetBytes(response));
+                                        AddToLogBox("Success:\r\n" + response + "\r\n");
+                                    }
+
+
+
                                     break;
                                 }
                         }
@@ -997,35 +1111,106 @@ namespace HomeKit_Test
 
                             case "/characteristics":
                                 {
-                                    string jsonString = Encoding.UTF8.GetString(bytes) ;
+                                    string jsonString = Encoding.UTF8.GetString(bytes);
                                     AddToLogBox("jsonString:\r\n" + jsonString + "\r\n");
 
                                     int curPos = jsonString.IndexOf("[");
+                                    curPos = jsonString.IndexOf("{", curPos + 1);
                                     int openBrackets;
 
-                                    while (curPos < jsonString.Length)
+                                    string response = null;
+                                    bool hasErrors = false;
+                                   
+
+                                    while ((curPos = jsonString.IndexOf("{", curPos)) != -1)
                                     {
-                                        int startPos = curPos + 1;
+                                       
+                                        int startPos = curPos;
+                                        int endPos = 0;
                                         openBrackets = 0;
                                         do
                                         {
-                                            if (jsonString[curPos].Equals("{")) openBrackets++;
-                                            if (jsonString[curPos].Equals("}")) openBrackets--;
+                                            if (jsonString[curPos].Equals('{'))
+                                            {
+                                                openBrackets++;
+                                                if (openBrackets == 0) startPos = curPos;
+                                            }
+                                            if (jsonString[curPos].Equals('}'))
+                                            {
+                                                openBrackets--;
+                                                if (openBrackets == 0) endPos = curPos;
+                                                curPos++;
+                                                break;
+
+                                            }
                                             if (openBrackets < 0) break;
-                                           
-                                        } while (openBrackets != 0);
-                                        if (openBrackets < 0)
+                                            curPos++;
+
+                                        } while (curPos < jsonString.Length);
+                                        if (openBrackets != 0)
                                         {
-                                            AddToLogBox("JSON Parse Error\r\n");
+
                                             break;
                                         }
-                                        int curLength = curPos - startPos);
-
-                                        int keyPos = jsonString.IndexOf(@"""aid""", startPos, curLength);
-                                        keyPos = jsonString.IndexOf(":", keyPos, keyP)
 
 
+                                        int curLength = endPos - startPos + 1;
 
+                                        string aidString = jsonGetCharacteristicString(jsonString, "aid", startPos, curLength);
+                                        string iidString = jsonGetCharacteristicString(jsonString, "iid", startPos, curLength);
+                                        int temp_iid;
+                                        if (int.TryParse(iidString, out temp_iid))
+                                        {
+                                            if (temp_iid == 14)
+                                            {
+                                                AddToLogBox("iid 14");
+                                            }
+                                        }
+                                        string valueString = jsonGetCharacteristicString(jsonString, "value", startPos, curLength);
+                                        string evString = jsonGetCharacteristicString(jsonString, "ev", startPos, curLength);
+
+                                        int status;
+
+                                        if (valueString != null)
+                                        {
+                                            status = handleCharacteristicWrite(stream, aidString, iidString, valueString);
+                                            AddToLogBox("aid: " + aidString + " iid: " + iidString + " value: " + valueString + " status: " + status.ToString() + "\r\n");
+                                        }
+                                        else if (evString != null)
+                                        {
+                                            status = handleCharacteristicEvent(stream, aidString, iidString, evString); 
+                                            AddToLogBox("aid: " + aidString + " iid: " + iidString + " ev: " + evString + " status: " + status.ToString() + "\r\n");
+                                            if (status == 0 && UInt32.Parse(iidString) == 10) queueAccessoryFlageEvent = true;
+                                        }
+                                        else continue;
+
+                                        
+
+
+
+                                        if (response == null) response = @"{""characteristics"" : [";
+                                        else response += ",";
+                                        response += jsonGenCharacteristicStatus(aidString, iidString, status);
+                                        if (status != 0) hasErrors = true;
+
+                                    }
+
+                                    response += "]}";
+
+                                    if (!hasErrors)
+                                    {
+                                        sendHAPResponse(stream, "204");
+                                        AddToLogBox("No Errors\r\n");
+                                    }
+                                    else
+                                    {
+                                        sendHAPResponse(stream, "207", Encoding.UTF8.GetBytes(response));
+                                        AddToLogBox("Error:\r\n" + response + "\r\n");
+                                    }
+
+                                    if(queueAccessoryFlageEvent)
+                                    {
+                                    //    sendHAPEvent(stream, "1", "10", evAccessoryFlagEnabled.ToString().ToLower());
                                     }
 
                                     break;
@@ -1038,10 +1223,171 @@ namespace HomeKit_Test
 
         }
 
-        String jsonGetValue(string jsonString, string key, int curPos, int curLength)
+        private string genGetCharacteristicResponse(int aid, int iid, ref bool hasErrors)
         {
 
-            return "foo";
+            string value;
+            int status = 0;
+
+            if (aid == 1)
+            {
+                switch(iid)
+                {
+                    case 14:
+                        {
+                            if (identifyBox.Checked) value = "true";
+                            else value = "false";
+                            break;
+                        }
+                    case 16:
+                        {
+                            value = "true";
+                            break;
+                        }
+                    default:
+                        {
+                            hasErrors = true;
+                            return jsonGenCharacteristicStatus(aid.ToString(), iid.ToString(), -70409);
+                        }
+                }
+            }
+            else
+            {
+                hasErrors = true;
+                return jsonGenCharacteristicStatus(aid.ToString(), iid.ToString(), -70409);
+            }
+            
+            
+            return jsonGenCharacteristicValue(aid.ToString(), iid.ToString(), value, status, true);
+           
+
+        }
+
+        private void sendHAPEvent(NetworkStream stream, string aidString, string iidString, string valueString)
+        {
+            string response = @"{""characteristics"" : [{""aid"" : " + aidString + @", ""iid"" : " + iidString + @", ""value"" : " + valueString + "}]}";
+            sendHAPResponse(stream, "200", Encoding.UTF8.GetBytes(response), isEvent: true);
+            AddToLogBox("Event Response: " + response + "\r\n");
+        }
+
+        void updateBonjourFlag(string key, string value)
+        {
+            ResourceRecord resourceRecord = za.Resources.Find(delegate (ResourceRecord r)
+            {
+                if (r is TXTRecord) return true;
+                else return false;
+            });
+
+            if (resourceRecord is TXTRecord)
+            {
+                TXTRecord txtRecord = (TXTRecord)resourceRecord;
+
+                string current_sf = txtRecord.Strings.Find(delegate (string s)
+                {
+                    if (s.Length >= key.Length && s.Substring(0, key.Length).Equals(key, StringComparison.OrdinalIgnoreCase)) return true;
+                    else return false;
+                });
+
+                txtRecord.Strings.Remove(current_sf);
+                za.AddProperty(key, value);
+
+
+            }
+
+            
+        }
+        string jsonGenCharacteristicStatus(string aidString, string iidString, int status)
+        {
+            return @"{""aid"" : " + aidString + @", ""iid"" : " + iidString + @", ""status"" : " + status.ToString() + "}";
+        }
+
+        string jsonGenCharacteristicValue(string aidString, string iidString, string value, int status = 0, bool includeStatus = false)
+        {
+            
+            if (includeStatus) return @"{""aid"" : " + aidString + @", ""iid"" : " + iidString + @", ""value"" : " + value + @", ""status"" : " + status.ToString() + "}";
+            return @"{""aid"" : " + aidString + @", ""iid"" : " + iidString + @", ""value"" : " + value + "}";
+        }
+
+        int handleCharacteristicWrite(NetworkStream stream, String aidString, String iidString, String valueString)
+        {
+            int aid = int.Parse(aidString);
+            int iid = int.Parse(iidString);
+
+            if (aid != 1)
+            {
+                return -70409;
+            }
+            switch (iid)
+            {
+                case 6:
+                    {
+                        if (valueString.Equals("true")) if (!Identify.IsBusy) Identify.RunWorkerAsync();
+                        return 0;
+                    }
+                case 14:
+                    {
+                        if (valueString.Equals("1")) setIdentifyBox(true);
+                        else setIdentifyBox(false);
+                        return 0;
+                    }
+            }
+
+            return 70409;
+
+
+        }
+
+        int handleCharacteristicEvent(NetworkStream stream, String aidString, String iidString, String evString)
+        {
+            int aid = int.Parse(aidString);
+            int iid = int.Parse(iidString);
+
+            if (aid != 1)
+            {
+                return -70409;
+            }
+            switch (iid)
+            {
+                case 10:
+                    {
+                        if (evString.Equals("true")) evAccessoryFlagEnabled = true;
+                        else evAccessoryFlagEnabled = false;
+                        return 0;
+                    }
+                default: return 0;
+
+            }
+
+            return 70409;
+
+
+        }
+
+        String jsonGetCharacteristicString(string jsonString, string key, int curPos, int curLength)
+        {
+
+            int curEnd = curPos + curLength;
+            int keyPos = jsonString.IndexOf(@"""" + key + @"""", curPos, curLength);
+
+            if (keyPos == -1) return null;
+
+            keyPos = jsonString.IndexOf(":", keyPos + key.Length, curEnd - keyPos - key.Length) + 1;
+
+            int keyEnd = 0;            
+            int openBrackets = 0;
+
+            for (int i = keyPos; i<curEnd; i++)
+            {
+                if (jsonString[i].Equals("{")) openBrackets++;
+                if (jsonString[i].Equals("}")) openBrackets--;
+                if (openBrackets == 0 && jsonString[i].Equals(','))
+                {
+                    keyEnd = i;
+                    break;
+                }
+            }
+            if (keyEnd == 0) keyEnd = curEnd-1;
+            return jsonString.Substring(keyPos,keyEnd - keyPos);
 
         }
 
@@ -1177,16 +1523,17 @@ namespace HomeKit_Test
             sendHAPResponse(stream, responseCode, new Byte[0]);
             return;
         }
-        void sendHAPResponse(NetworkStream stream, String responseCode, Byte[] responseBytes = null, bool chunked = false)
+        void sendHAPResponse(NetworkStream stream, String responseCode, Byte[] responseBytes = null, bool chunked = false, String contentType = "application/hap+json", bool isEvent = false)
         {
 
             Byte[] response;
-            if (responseBytes != null && responseBytes.Length > 0) response = genHTTPResponse(stream, responseCode, "application/hap+json", responseBytes, responseBytes.Length, chunked);
-            else response = genHTTPResponse(stream, responseCode);
+            if (responseBytes != null && responseBytes.Length > 0) response = genHTTPResponse(responseCode, contentType, responseBytes, responseBytes.Length, chunked, isEvent);
+            else response = genHTTPResponse(responseCode);
 
             Byte[] sendBuffer = new Byte[0];
 
             int curPos = 0;
+            UInt32 tempNonce = accToControlNonce.lo;
             while (curPos < response.Length)
             {
                 int curLength = response.Length - curPos;
@@ -1216,7 +1563,7 @@ namespace HomeKit_Test
             stream.Write(sendBuffer, 0, sendBuffer.Length);
 
             Byte[] decrypted;
-            UInt32 tempNonce = 0;
+            
             curPos = 0;
             while (curPos < sendBuffer.Length)
             {
@@ -1233,8 +1580,7 @@ namespace HomeKit_Test
 
             }
             AddToLogBox("\r\n");
-
-
+            if (isEvent) AddToLogBox("Event Response: " + Encoding.UTF8.GetString(response) + "\r\n");
         }
 
         void appendTLVBytes(ref Byte[] bytesIn, Byte TLVkey, Byte[] TLVValue)
@@ -1322,10 +1668,13 @@ namespace HomeKit_Test
                 Status1.Text = TextIn;
             });
         }
-        Byte[] genHTTPResponse(NetworkStream senderStream, string status, string contentType = null, Byte[] data = null, int dataLength = 0, bool chunked = false)
+        Byte[] genHTTPResponse(string status, string contentType = null, Byte[] data = null, int dataLength = 0, bool chunked = false, bool isEvent = false)
         {
 
-            String msg = "HTTP/1.1 " + status + " ";
+            String msg;
+            if (!isEvent) msg = "HTTP/1.1 " + status + " ";
+            else msg = "EVENT/1.0 " + status + " ";
+
             switch (status)
             {
                 case "200":
@@ -1333,6 +1682,12 @@ namespace HomeKit_Test
                     break;
                 case "204":
                     msg += "No Content";
+                    break;
+                case "207": 
+                    msg += "Multi-Status";
+                    break;
+                case "400":
+                    msg += "Bad Request";
                     break;
             }
             msg += "\r\n";
@@ -1376,7 +1731,7 @@ namespace HomeKit_Test
         private void sendHTTPResponse(NetworkStream senderStream, string status, string contentType = null, Byte[] data = null, int dataLength = 0)
         {
 
-            Byte[] bytes = genHTTPResponse(senderStream, status, contentType, data, dataLength);
+            Byte[] bytes = genHTTPResponse(status, contentType, data, dataLength);
 
             senderStream.Write(bytes, 0, bytes.Length);
 
@@ -3483,8 +3838,30 @@ namespace HomeKit_Test
 
         void addBytesToLogBox(Byte[] x)
         {
-            for (int i = 0; i < x.Length; i++) AddToLogBox(x[i].ToString("X2"));
+            if (x != null) for (int i = 0; i < x.Length; i++) AddToLogBox(x[i].ToString("X2"));
+            else AddToLogBox("null");
             AddToLogBox("\r\n");
+        }
+
+        private void Identify_DoWork(object sender, DoWorkEventArgs e)
+        {
+            
+            for (int i=0; i < 5; i++)
+            {
+                setIdentifyBox(true);
+                Thread.Sleep(500);
+                setIdentifyBox(false);
+                Thread.Sleep(500);
+            }
+          
+        }
+
+        void setIdentifyBox(bool newVal)
+        {
+            identifyBox.BeginInvoke((MethodInvoker)delegate ()
+            {
+                identifyBox.Checked = newVal;
+            });
         }
     }
 }

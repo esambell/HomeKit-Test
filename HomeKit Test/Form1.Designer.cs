@@ -41,6 +41,8 @@
             this.button4 = new System.Windows.Forms.Button();
             this.label2 = new System.Windows.Forms.Label();
             this.checkBox1 = new System.Windows.Forms.CheckBox();
+            this.identifyBox = new System.Windows.Forms.CheckBox();
+            this.Identify = new System.ComponentModel.BackgroundWorker();
             this.SuspendLayout();
             // 
             // TCPListenerTask
@@ -148,11 +150,26 @@
             this.checkBox1.Text = "checkBox1";
             this.checkBox1.UseVisualStyleBackColor = true;
             // 
+            // identifyBox
+            // 
+            this.identifyBox.AutoSize = true;
+            this.identifyBox.Location = new System.Drawing.Point(688, 675);
+            this.identifyBox.Name = "identifyBox";
+            this.identifyBox.Size = new System.Drawing.Size(87, 24);
+            this.identifyBox.TabIndex = 10;
+            this.identifyBox.Text = "Identify";
+            this.identifyBox.UseVisualStyleBackColor = true;
+            // 
+            // Identify
+            // 
+            this.Identify.DoWork += new System.ComponentModel.DoWorkEventHandler(this.Identify_DoWork);
+            // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(9F, 20F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(1710, 831);
+            this.Controls.Add(this.identifyBox);
             this.Controls.Add(this.checkBox1);
             this.Controls.Add(this.label2);
             this.Controls.Add(this.button4);
@@ -186,6 +203,8 @@
         private System.Windows.Forms.Button button4;
         private System.Windows.Forms.Label label2;
         private System.Windows.Forms.CheckBox checkBox1;
+        private System.Windows.Forms.CheckBox identifyBox;
+        private System.ComponentModel.BackgroundWorker Identify;
     }
 }
 

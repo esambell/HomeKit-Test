@@ -52,62 +52,49 @@
                                     ""perms"" : [ ""pr"" ],
                                     ""format"" : ""string"",
                                     ""iid"" : 7
-                                },
-                                {
-                                    ""type"" : ""53"",
-                                    ""value"" : ""100.1.1"",
-                                    ""perms"" : [ ""pr"" ],
-                                    ""format"" : ""string"",
-                                    ""iid"" : 8
-                                },
-                                {
-                                    ""type"" : ""34AB8811-AC7F-4340-BAC3-FD6A85F9943B"",
-                                    ""value"" : ""Internal"",
-                                    ""perms"" : [ ""pr"" ],
-                                    ""format"" : ""string"",
-                                    ""iid"" : 9
                                 }
+
                                     
                             ]
                         },
                         {
                             ""type"" : ""A2"",
-                            ""iid"" : 10,
+                            ""iid"" : 11,
                             ""characteristics"" : [
                                 {
                                     ""type"" : ""37"",
                                     ""value"" : ""1.1.0"",
                                     ""perms"" : [ ""pr"" ],
                                     ""format"" : ""string"",
-                                    ""iid"" : 11
+                                    ""iid"" : 12
                                 }
                             ]
                         },
                         {
                             ""type"" : ""47"",
-                            ""iid"" : 12,
+                            ""iid"" : 13,
                             ""primary"" : true, 
                             ""characteristics"" : [
                                 {
                                     ""type"" : ""25"",
                                     ""value"" : false,
-                                    ""perms"" : [ ""pr"", ""pw"" ],
+                                    ""perms"" : [ ""pr"", ""pw"", ""ev"" ],
                                     ""format"" : ""bool"",
-                                    ""iid"" : 13
-                                },
-                                {
-                                    ""type"" : ""23"",
-                                    ""value"" : ""Button"",
-                                    ""perms"" : [ ""pr""],
-                                    ""format"" : ""string"",
                                     ""iid"" : 14
                                 },
                                 {
-                                    ""type"" : ""26"",
-                                    ""value"" : false,
-                                    ""perms"" : [ ""pr"" ],
-                                    ""format"" : ""bool"",
+                                    ""type"" : ""23"",
+                                    ""value"" : ""Button Presser"",
+                                    ""perms"" : [ ""pr""],
+                                    ""format"" : ""string"",
                                     ""iid"" : 15
+                                },
+                                {
+                                    ""type"" : ""26"",
+                                    ""value"" : true,
+                                    ""perms"" : [ ""pr"", ""ev"" ],
+                                    ""format"" : ""bool"",
+                                    ""iid"" : 16
                                 }
                                 
                             ]
@@ -330,5 +317,33 @@
     }
 
 }
+/*
+ * 
+ * 
+ *  {
+                                    ""type"" : ""34AB8811-AC7F-4340-BAC3-FD6A85F9943B"",
+                                    ""value"" : ""Internal"",
+                                    ""perms"" : [ ""pr"" ],
+                                    ""format"" : ""string"",
+                                    ""iid"" : 9
+                                },
+,
+                               
+                                {
+                                    ""type"" : ""A6"",
+                                    ""value"" : 0,
+                                    ""perms"" : [ ""pr""],
+                                    ""format"" : ""uint32"",
+                                    ""iid"" : 10
+                                }
+,
+                                {
+                                    ""type"" : ""53"",
+                                    ""value"" : ""100.1.1"",
+                                    ""perms"" : [ ""pr"" ],
+                                    ""format"" : ""string"",
+                                    ""iid"" : 8
+                                }
 
 
+*/
