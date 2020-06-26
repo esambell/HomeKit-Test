@@ -138,6 +138,7 @@ namespace HomeKit_Test
         
         Byte[] dataAccessoryLTSK = new byte[] {0x9d, 0x61, 0xb1, 0x9d, 0xef, 0xfd, 0x5a, 0x60, 0xba, 0x84, 0x4a, 0xf4, 0x92, 0xec, 0x2c, 0xc4,
                                         0x44, 0x49, 0xc5, 0x69, 0x7b, 0x32, 0x69, 0x19, 0x70, 0x3b, 0xac, 0x03, 0x1c, 0xae, 0x7f, 0x60};
+        Byte[] accessoryLTPK;
         string dataPairingID = "12:13:12:12:13:13";
 
 
@@ -174,12 +175,16 @@ namespace HomeKit_Test
         private void Form1_Load(object sender, EventArgs e)
         {
 
+            readCfg();
+            
             K = initHexArray(k);
             HInitial = initHexArray(h);
             N = UInt32ArrayReverse(N);
             a = UInt32ArrayReverse(a);
             b = UInt32ArrayReverse(b);
             s = UInt32ArrayReverse(s);
+            init_ed25519();
+            accessoryLTPK = ed25519PublicKey(dataAccessoryLTSK);
 
             label2.Text = DeviceCode;
 
@@ -206,7 +211,7 @@ namespace HomeKit_Test
            
             TCPListenerTask.RunWorkerAsync();
 
-            init_ed25519();
+            
 
             int32Array A, B, mod;
             A.digits = new uint[] { 0x06, 0xFFFFFFFF, 0xFFFF };
@@ -770,11 +775,11 @@ namespace HomeKit_Test
                                                 bool result = ed25519verify(pairings[0].dataDeviceLTPK, deviceInfo, deviceSignature);
                                                 AddToLogBox(result.ToString() + "\r\n");
 
-                                                writeCfg();
+                                              
 
                                                 Byte[] pairingID = getAccessoryPairingIDBytes(dataPairingID);
 
-                                                Byte[] accessoryLTPK = ed25519PublicKey(dataAccessoryLTSK);
+                                                
                                                 Byte[] accessoryX = genHKDFSHA512(fromUInt32Array(storedK), "Pair-Setup-Accessory-Sign-Salt", "Pair-Setup-Accessory-Sign-Info", 32);
                                                 Byte[] accessoryInfo = accessoryX.Concat(pairingID).Concat(accessoryLTPK).ToArray();
 
@@ -803,9 +808,9 @@ namespace HomeKit_Test
 
                                                 AddToLogBox("Reached Level 5\r\n");
 
-                                                updateBonjourFlag("sf","0");
-                                                //updateBonjourFlag("c#", (++configNum).ToString());
+                                                writeCfg();
 
+                                                updateBonjourFlag("sf","0");
                                                 sd.Announce(za);
 
                                                 break;
@@ -881,6 +886,15 @@ namespace HomeKit_Test
 
                                                 Byte[] receivedPairingID = findTLVKey(subTLV, 0x01, subTLV.Length);
                                                 Byte[] receivedSignature = findTLVKey(subTLV, 0x0a, subTLV.Length);
+
+                                                int pairingID = findPairingIdIndex(receivedPairingID);
+                                                if (pairingID == -1)
+                                                {
+                                                    sendPairingError(stream, 0x04, 0x02);
+                                                    AddToLogBox("Received pairing ID not found\r\n");
+                                                    break;
+                                                }
+
 
                                                 AddToLogBox("receivedPairingID\r\n");
                                                 addBytesToLogBox(receivedPairingID);
@@ -978,7 +992,7 @@ namespace HomeKit_Test
 
                                                 AddToLogBox("Pairing " + pairingIndex + " Added\r\n");
                                                 sendHAPResponse(stream, "200", response, contentType: "application/pairing+tlv8");
-
+                                                writeCfg();
                                                 break;
                                             }
                                         case 0x04:
@@ -997,8 +1011,12 @@ namespace HomeKit_Test
                                                 appendTLVBytes(ref response, 0x06, new byte[] { 0x02 });
 
                                                 sendHAPResponse(stream, "200", response, contentType: "application/pairing+tlv8");
-
-
+                                                if (pairingIndex == 0)
+                                                {
+                                                    updateBonjourFlag("sf", "1");
+                                                    sd.Announce(za);
+                                                }
+                                                writeCfg();
                                                 break;
                                             }
                                         case 0x05:
@@ -1321,12 +1339,12 @@ namespace HomeKit_Test
             {
                 case 6:
                     {
-                        if (valueString.Equals("true")) if (!Identify.IsBusy) Identify.RunWorkerAsync();
+                        if (jsonToBool(valueString)) if (!Identify.IsBusy) Identify.RunWorkerAsync();
                         return 0;
                     }
                 case 14:
                     {
-                        if (valueString.Equals("1")) setIdentifyBox(true);
+                        if (jsonToBool(valueString)) setIdentifyBox(true);
                         else setIdentifyBox(false);
                         return 0;
                     }
@@ -1337,6 +1355,11 @@ namespace HomeKit_Test
 
         }
 
+        bool jsonToBool(string jsonIn)
+        {
+            if (jsonIn.Trim().Equals("1") || jsonIn.Trim().ToLowerInvariant().Equals("true")) return true;
+            else return false;
+        }
         int handleCharacteristicEvent(NetworkStream stream, String aidString, String iidString, String evString)
         {
             int aid = int.Parse(aidString);
@@ -1415,6 +1438,71 @@ namespace HomeKit_Test
             File.WriteAllBytes(cfgFile, toWrite);
         }
 
+        void readCfg()
+        {
+
+            if (!File.Exists(cfgFile)) return;
+            Byte[] readBytes = File.ReadAllBytes(cfgFile);
+
+            int curPos = 0;
+            int curLTPK = 0;
+            int curPairingID = 0;
+            int curPermissions = 0;
+
+
+            while (curPos < readBytes.Length)
+            {
+                int curLength = 0;
+                switch(readBytes[curPos])
+                {
+                    case cfgDeviceLTPK:
+                        {
+                            curLength = loadByteArray(curPos, readBytes, ref pairings[curLTPK].dataDeviceLTPK);
+                            curLTPK++;
+                            break;
+                        }
+                    case cfgDevicePairingID:
+                        {
+
+                            curLength = loadByteArray(curPos, readBytes, ref pairings[curPairingID].dataDevicePairingID);
+                            curPairingID++;
+                            break;
+                        }
+                    case cfgPermissions:
+                        {
+
+                            curLength = bytesToUInt16(readBytes[curPos+1], readBytes[curPos+2]);
+                            pairings[curPermissions].dataPermissions = readBytes[curPos+3];
+                            curPermissions++;
+                            break;
+                        }
+                    case cfgAccessoryLTSK:
+                        {
+
+                            curLength = loadByteArray(curPos, readBytes, ref dataAccessoryLTSK);
+                            curPairingID++;
+                            break;
+                        }
+                }
+                curPos += curLength + 3;
+            }
+            
+
+
+            
+
+            
+        }
+
+        int loadByteArray(int curPos, Byte[] bytesIn, ref Byte[] valueArray)
+        {
+            
+            int curLength = bytesToUInt16(bytesIn[curPos + 1], bytesIn[curPos + 2]);
+            valueArray = new Byte[curLength];
+            for (int i = 0; i < curLength; i++) valueArray[i] = bytesIn[curPos + i + 3];
+            return curLength;
+        }
+
         int findPairingIdIndex(Byte[] pairingID)
         {
             for( int i = 0; i< pairings.Length; i++)
@@ -1451,6 +1539,11 @@ namespace HomeKit_Test
             
             return returnVal;
 
+        }
+
+        UInt16 bytesToUInt16(Byte lo, Byte hi)
+        {
+            return (UInt16)(lo | (hi << 8));
         }
 
         Byte[] uint16toBytes(UInt16 x)
