@@ -696,7 +696,7 @@ namespace HomeKit_Test
                         else
                         {
 
-                            if (curSession.client.Client.Poll(1, SelectMode.SelectRead))
+                            if (curSession.client.Client.Poll(1, SelectMode.SelectRead) && curSession.client.Available == 0)
                                 closeSession(ref curSession);
                         }
                     }
