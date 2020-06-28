@@ -541,7 +541,6 @@ namespace HomeKit_Test
                     if (!sessionActive(curSession)) continue;
                     if (!activePairingId(curSession.pairingID))
                     {
-                        AddToLogBox(curSession.client.Client.RemoteEndPoint.ToString() + ": Pairing Removed");
                         closeSession(ref curSession);
                         continue;
                     }
@@ -691,19 +690,14 @@ namespace HomeKit_Test
 
                             }
                            
-                              
+                            
 
                         }
                         else
                         {
 
-                            if ((curSession.client.Client.Poll(1, SelectMode.SelectRead) && curSession.client.Available == 0) || curSession.connectionToClose)
-                            {
-                                AddToLogBox("Close Detected " + curSession.client.Available.ToString() + " Bytes Available\r\n");
+                            if (curSession.client.Client.Poll(1, SelectMode.SelectRead))
                                 closeSession(ref curSession);
-
-                            }
-
                         }
                     }
                   
@@ -749,7 +743,7 @@ namespace HomeKit_Test
         void closeSession(ref Session curSession)
         {
             {
-                AddToLogBox(curSession.client.Client.RemoteEndPoint.ToString() + ": Conenction Closed\r\n");           
+                AddToLogBox(curSession.client.Client.RemoteEndPoint.ToString() + ": Conenction Closed\r\n");
                 curSession.client.Close();
                 curSession.connectionToClose = false;
                 curSession.encryptedSession = false;
@@ -3262,11 +3256,7 @@ namespace HomeKit_Test
 
         private void button3_Click(object sender, EventArgs e)
         {
-            int i;
-            if ((i = sessionListBox.SelectedIndex) != -1)
-            {
-                sessions[i].connectionToClose = true;
-            }
+            MontyTest.RunWorkerAsync();
         }
 
         private void MontyTest_DoWork(object sender, DoWorkEventArgs e)
