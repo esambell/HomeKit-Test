@@ -1,6 +1,6 @@
 ﻿namespace HomeKit_Test
 {
-    partial class Form1
+    partial class form1
     {
         /// <summary>
         /// Required designer variable.
@@ -28,6 +28,7 @@
         /// </summary>
         private void InitializeComponent()
         {
+            this.components = new System.ComponentModel.Container();
             this.TCPListenerTask = new System.ComponentModel.BackgroundWorker();
             this.label1 = new System.Windows.Forms.Label();
             this.textBox1 = new System.Windows.Forms.TextBox();
@@ -43,6 +44,13 @@
             this.checkBox1 = new System.Windows.Forms.CheckBox();
             this.identifyBox = new System.Windows.Forms.CheckBox();
             this.Identify = new System.ComponentModel.BackgroundWorker();
+            this.loopCountLabel = new System.Windows.Forms.Label();
+            this.loopCountTimer = new System.Windows.Forms.Timer(this.components);
+            this.cycleDelayTrackBar = new System.Windows.Forms.TrackBar();
+            this.cycleDelayLabel = new System.Windows.Forms.Label();
+            this.sessionListBox = new System.Windows.Forms.ListBox();
+            this.pairingsListBox = new System.Windows.Forms.ListBox();
+            ((System.ComponentModel.ISupportInitialize)(this.cycleDelayTrackBar)).BeginInit();
             this.SuspendLayout();
             // 
             // TCPListenerTask
@@ -64,19 +72,19 @@
             this.textBox1.Multiline = true;
             this.textBox1.Name = "textBox1";
             this.textBox1.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
-            this.textBox1.Size = new System.Drawing.Size(1578, 387);
+            this.textBox1.Size = new System.Drawing.Size(893, 387);
             this.textBox1.TabIndex = 1;
             // 
             // textBox2
             // 
-            this.textBox2.Location = new System.Drawing.Point(632, 529);
+            this.textBox2.Location = new System.Drawing.Point(172, 514);
             this.textBox2.Name = "textBox2";
             this.textBox2.Size = new System.Drawing.Size(729, 26);
             this.textBox2.TabIndex = 2;
             // 
             // button1
             // 
-            this.button1.Location = new System.Drawing.Point(1421, 529);
+            this.button1.Location = new System.Drawing.Point(515, 577);
             this.button1.Name = "button1";
             this.button1.Size = new System.Drawing.Size(197, 39);
             this.button1.TabIndex = 3;
@@ -99,7 +107,7 @@
             // 
             // button2
             // 
-            this.button2.Location = new System.Drawing.Point(1421, 587);
+            this.button2.Location = new System.Drawing.Point(515, 635);
             this.button2.Name = "button2";
             this.button2.Size = new System.Drawing.Size(196, 42);
             this.button2.TabIndex = 5;
@@ -109,7 +117,7 @@
             // 
             // button3
             // 
-            this.button3.Location = new System.Drawing.Point(1421, 656);
+            this.button3.Location = new System.Drawing.Point(515, 704);
             this.button3.Name = "button3";
             this.button3.Size = new System.Drawing.Size(196, 44);
             this.button3.TabIndex = 6;
@@ -123,7 +131,7 @@
             // 
             // button4
             // 
-            this.button4.Location = new System.Drawing.Point(307, 637);
+            this.button4.Location = new System.Drawing.Point(117, 649);
             this.button4.Name = "button4";
             this.button4.Size = new System.Drawing.Size(106, 50);
             this.button4.TabIndex = 7;
@@ -143,7 +151,7 @@
             // checkBox1
             // 
             this.checkBox1.AutoSize = true;
-            this.checkBox1.Location = new System.Drawing.Point(688, 622);
+            this.checkBox1.Location = new System.Drawing.Point(346, 623);
             this.checkBox1.Name = "checkBox1";
             this.checkBox1.Size = new System.Drawing.Size(113, 24);
             this.checkBox1.TabIndex = 9;
@@ -153,7 +161,7 @@
             // identifyBox
             // 
             this.identifyBox.AutoSize = true;
-            this.identifyBox.Location = new System.Drawing.Point(688, 675);
+            this.identifyBox.Location = new System.Drawing.Point(346, 676);
             this.identifyBox.Name = "identifyBox";
             this.identifyBox.Size = new System.Drawing.Size(87, 24);
             this.identifyBox.TabIndex = 10;
@@ -164,11 +172,70 @@
             // 
             this.Identify.DoWork += new System.ComponentModel.DoWorkEventHandler(this.Identify_DoWork);
             // 
-            // Form1
+            // loopCountLabel
+            // 
+            this.loopCountLabel.AutoSize = true;
+            this.loopCountLabel.Location = new System.Drawing.Point(36, 574);
+            this.loopCountLabel.Name = "loopCountLabel";
+            this.loopCountLabel.Size = new System.Drawing.Size(51, 20);
+            this.loopCountLabel.TabIndex = 11;
+            this.loopCountLabel.Text = "label3";
+            // 
+            // loopCountTimer
+            // 
+            this.loopCountTimer.Enabled = true;
+            this.loopCountTimer.Interval = 50;
+            this.loopCountTimer.Tick += new System.EventHandler(this.loopCountTimer_Tick);
+            // 
+            // cycleDelayTrackBar
+            // 
+            this.cycleDelayTrackBar.Location = new System.Drawing.Point(104, 754);
+            this.cycleDelayTrackBar.Maximum = 5000;
+            this.cycleDelayTrackBar.Name = "cycleDelayTrackBar";
+            this.cycleDelayTrackBar.Size = new System.Drawing.Size(862, 69);
+            this.cycleDelayTrackBar.SmallChange = 100;
+            this.cycleDelayTrackBar.TabIndex = 12;
+            this.cycleDelayTrackBar.TickFrequency = 100;
+            this.cycleDelayTrackBar.Value = 200;
+            this.cycleDelayTrackBar.Scroll += new System.EventHandler(this.cycleDelayTrackBar_Scroll);
+            // 
+            // cycleDelayLabel
+            // 
+            this.cycleDelayLabel.AutoSize = true;
+            this.cycleDelayLabel.Location = new System.Drawing.Point(801, 596);
+            this.cycleDelayLabel.Name = "cycleDelayLabel";
+            this.cycleDelayLabel.Size = new System.Drawing.Size(51, 20);
+            this.cycleDelayLabel.TabIndex = 13;
+            this.cycleDelayLabel.Text = "label3";
+            // 
+            // sessionListBox
+            // 
+            this.sessionListBox.FormattingEnabled = true;
+            this.sessionListBox.ItemHeight = 20;
+            this.sessionListBox.Location = new System.Drawing.Point(1184, 65);
+            this.sessionListBox.Name = "sessionListBox";
+            this.sessionListBox.Size = new System.Drawing.Size(796, 284);
+            this.sessionListBox.TabIndex = 14;
+            // 
+            // pairingsListBox
+            // 
+            this.pairingsListBox.FormattingEnabled = true;
+            this.pairingsListBox.ItemHeight = 20;
+            this.pairingsListBox.Location = new System.Drawing.Point(1184, 391);
+            this.pairingsListBox.Name = "pairingsListBox";
+            this.pairingsListBox.Size = new System.Drawing.Size(796, 384);
+            this.pairingsListBox.TabIndex = 15;
+            // 
+            // form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(9F, 20F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(1710, 831);
+            this.ClientSize = new System.Drawing.Size(2059, 831);
+            this.Controls.Add(this.pairingsListBox);
+            this.Controls.Add(this.sessionListBox);
+            this.Controls.Add(this.cycleDelayLabel);
+            this.Controls.Add(this.cycleDelayTrackBar);
+            this.Controls.Add(this.loopCountLabel);
             this.Controls.Add(this.identifyBox);
             this.Controls.Add(this.checkBox1);
             this.Controls.Add(this.label2);
@@ -180,9 +247,10 @@
             this.Controls.Add(this.textBox2);
             this.Controls.Add(this.textBox1);
             this.Controls.Add(this.label1);
-            this.Name = "Form1";
+            this.Name = "form1";
             this.Text = "Form1";
             this.Load += new System.EventHandler(this.Form1_Load);
+            ((System.ComponentModel.ISupportInitialize)(this.cycleDelayTrackBar)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -205,6 +273,12 @@
         private System.Windows.Forms.CheckBox checkBox1;
         private System.Windows.Forms.CheckBox identifyBox;
         private System.ComponentModel.BackgroundWorker Identify;
+        private System.Windows.Forms.Label loopCountLabel;
+        private System.Windows.Forms.Timer loopCountTimer;
+        private System.Windows.Forms.TrackBar cycleDelayTrackBar;
+        private System.Windows.Forms.Label cycleDelayLabel;
+        private System.Windows.Forms.ListBox sessionListBox;
+        private System.Windows.Forms.ListBox pairingsListBox;
     }
 }
 

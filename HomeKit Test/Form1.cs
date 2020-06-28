@@ -42,7 +42,7 @@ using System.Net.Mime;
 
 namespace HomeKit_Test
 {
-    public partial class Form1 : Form
+    public partial class form1 : Form
     {
 
         struct UInt64c
@@ -109,22 +109,30 @@ namespace HomeKit_Test
             0x1DDA08E9, 0x74A004F4, 0x9E61F5D1, 0x05284D20
         };
 
-        UInt32[] storedk;
-        UInt32[] storedB;
-        UInt32[] storedA;
-        UInt32[] storedv;
-        UInt32[] storedb;
-        UInt32[] storedK;
-        UInt32[] storedx;
-        UInt32[] storedu;
-        UInt32[] storedS;
-        Byte[] storeds;
+        struct PairSetupContext
+        {
+            public UInt32[] k;
+            public UInt32[] B;
+            //UInt32[] storedA;
+            public UInt32[] v;
+            public UInt32[] b;
+            public UInt32[] K;
+            //UInt32[] storedx;
+            public UInt32[] u;
+            //UInt32[] storedS;
+            public Byte[] s;
+        }
+
+        PairSetupContext pairSetupContext;
 
         const string cfgFile  = "hap.cfg";
         const byte cfgDeviceLTPK = 0x00;
         const byte cfgDevicePairingID = 0x01;
         const byte cfgAccessoryLTSK = 0x02;
         const byte cfgPermissions = 0x03;
+
+        bool stateEventQueued = false;
+        bool light = false;
 
         struct pairing
         {
@@ -153,27 +161,69 @@ namespace HomeKit_Test
         ServiceDiscovery sd;
         ServiceProfile za;
 
+
+
         bool paired = false;
 
-        Byte[] sessionKey;
-        Byte[] devicePublicKey;
-        Byte[] accessoryPublicKey;
-        bool encryptedSession = false;
-        Byte[] accToControlKey;
-        Byte[] controlToAccKey;
-        Byte[] sharedKey;
-        UInt64c accToControlNonce;
-        UInt64c controlToAccNonce;
-        bool evAccessoryFlagEnabled = false;
+        //Byte[] sessionKey;
+        //Byte[] devicePublicKey;
+        //Byte[] accessoryPublicKey;
+ //       bool encryptedSession = false;
+ //       Byte[] accToControlKey;
+ //       Byte[] controlToAccKey;
+ //       Byte[] sharedKey;
+        //UInt64c accToControlNonce;
+        //UInt64c controlToAccNonce;
+     //   bool evAccessoryFlagEnabled = false;
+        int numConnects = 0;
+        UInt64 loopCount = 0;
+        int cycleDelay = 200;
+
+        class Session
+        {
+            public TcpClient client;
+            public string request;
+            public string requestType;
+            public string uri;
+            public int contentLength;
+            public int dataBytesReceived;
+            public bool isLineBlank;
+            public bool parsingHeader;
+            public bool encryptedSession;
+            public UInt64c accToControlNonce;
+            public UInt64c controlToAccNonce;
+            public Byte[] accToControlKey;
+            public Byte[] controlToAccKey;
+            public Byte[] sharedKey;
+            public Byte[] sessionKey;
+            public Byte[] devicePublicKey;
+            public Byte curMethod;
+            public int encDataReceived;
+            public int encDataExpected;
+            public bool connectionToClose;
+            public Byte[] dataBytes;
+            public NetworkStream stream;
+            public Byte[] accessoryPublicKey;
+            public bool evOn;
+            public bool evInUse;
+            public int pairingID;
+
+        }
+
+        Session[] sessions = new Session[8];
 
 
-        public Form1()
+        public form1()
         {
             InitializeComponent();
         }
 
         private void Form1_Load(object sender, EventArgs e)
         {
+            cycleDelayTrackBar.Value = cycleDelay;
+            cycleDelayLabel.Text = cycleDelay.ToString();
+            for (int i = 0; i < sessions.Length; i++) sessionListBox.Items.Add("");
+            for (int i = 0; i < pairings.Length; i++) pairingsListBox.Items.Add("");
 
             readCfg();
             
@@ -313,7 +363,7 @@ namespace HomeKit_Test
             Byte[] nine = new byte[32];
             nine[0] = 9;
 
-            AddToLogBox(constants.constants.accDB);
+            //AddToLogBox(constants.constants.accDB);
 
             //Byte[] aPublic = X25519(aPrivate, nine);
             //Byte[] bPublic = X25519(bPrivate, nine);
@@ -423,223 +473,327 @@ namespace HomeKit_Test
         {
             TcpListener server = new TcpListener(IPAddress.Any, DevicePort);
             server.Start();
-            Byte[] bytes = new Byte[0xfFff];
-            String data = null;
-            int numConnects = 0;
-            Byte[] received = new Byte[1];
+            //Byte[] bytes = new Byte[0xffff];
+            
+            
 
             while (true)
             {
-                TcpClient client = server.AcceptTcpClient();
-                AddToLogBox(client.Client.RemoteEndPoint.ToString() + "\r\n");
-
-                if (client.Client.RemoteEndPoint.AddressFamily == AddressFamily.InterNetwork)
+                if (server.Pending())
                 {
-                    IPAddress curIP = ((IPEndPoint)client.Client.RemoteEndPoint).Address;
-                    AddToLogBox(curIP.ToString() + "\r\n");
-                    if (!curIP.Equals(IPAddress.Parse("192.168.1.67")))
+
+
+                    TcpClient client = server.AcceptTcpClient();
+                    AddToLogBox(client.Client.RemoteEndPoint.ToString() + " Connected\r\n");
+
+                    //if (client.Client.RemoteEndPoint.AddressFamily == AddressFamily.InterNetwork)
+                    //{
+                    //    IPAddress curIP = ((IPEndPoint)client.Client.RemoteEndPoint).Address;
+                    //    AddToLogBox(curIP.ToString() + "\r\n");
+                    //    if (!curIP.Equals(IPAddress.Parse("192.168.1.67")))
+                    //    {
+                    //        client.Close();
+                    //        continue;
+                    //    }
+
+
+                    //}
+
+                    int curSessionId;
+
+                    if ((curSessionId = findEmptySession()) == -1)
                     {
                         client.Close();
+                        AddToLogBox("Too Many Connections\r\n");
+                    }
+                    else
+                    {
+                        numConnects++;
+                        updateNumConnects();
+
+                        sessions[curSessionId] = new Session();
+                        Session curSession = sessions[curSessionId];
+
+
+                        curSession.client = client;
+                        curSession.request = null;
+                        curSession.isLineBlank = true;
+                        curSession.parsingHeader = true;
+                        curSession.dataBytesReceived = 0;
+                        curSession.contentLength = 0;
+                        curSession.requestType = null;
+                        curSession.uri = null;
+                        curSession.curMethod = 0;
+                        curSession.encDataReceived = 0;
+                        curSession.encDataExpected = 0;
+                        curSession.connectionToClose = false;
+                        curSession.dataBytes = new Byte[0xffff];
+                        curSession.stream = curSession.client.GetStream();
+                        curSession.pairingID = -1;
+                    }
+
+                }
+
+                bool dataReceived = false;
+                for (int curSessionId = 0; curSessionId< sessions.Length; curSessionId++)
+                {
+                    Session curSession = sessions[curSessionId];
+                    if (!sessionActive(curSession)) continue;
+                    if (!activePairingId(curSession.pairingID))
+                    {
+                        closeSession(ref curSession);
                         continue;
                     }
 
 
-                }
-
-
-                data = null;
-
-                int i;
-                numConnects++;
-                label1.BeginInvoke((MethodInvoker)delegate ()
-                {
-                    label1.Text = numConnects.ToString();
-                });
-
-                
-
-                NetworkStream stream = client.GetStream();
-                String request = null;
-                bool isLineBlank = true;
-                bool parsingHeader = true;
-                int dataBytesReceived = 0;
-                int contentLength = 0;
-                string requestType = null;
-                string uri = null;
-                Byte curMethod = 0;
-                int encDataReceived = 0;
-                int encDataExpected = 0;
-                bool connectionToClose = false;
-
-
-
-                while (client.Connected && (i = stream.Read(received, 0, 1)) != 0)
-                {
-                    if (!encryptedSession)
                     {
-                        if (parsingHeader)
-                        {
-                            // Translate data bytes to a ASCII string.
-                            data = System.Text.Encoding.ASCII.GetString(received, 0, i);
-                            request += data;
+                        
 
-                            if (data == "\n" && isLineBlank)
+
+                        if (curSession.client.Available != 0)
+                        {
+                            dataReceived = true;
+                            int i;
+                            Byte[] received = new Byte[1];
+                            if (curSession.client.Connected && (i = curSession.stream.Read(received, 0, 1)) != 0)
                             {
-                                AddToLogBox(request + "End" + "\r\n");
-
-                                if (request.Substring(0, 4) == "POST")
+                                if (!curSession.encryptedSession)
                                 {
-                                    requestType = "POST";
-                                }
-                                int slashIndex = request.IndexOf('/');
-                                int spaceIndex = request.IndexOf(' ', slashIndex);
-                                uri = request.Substring(slashIndex, spaceIndex - slashIndex);
-                                int contentLengthIndex;
-
-                                if ((contentLengthIndex = request.IndexOf("Content-Length:") + 15) != 15)
-                                {
-                                    int lineEndIndex = request.IndexOf('\r', contentLengthIndex);
-                                    contentLength = int.Parse(request.Substring(contentLengthIndex + 1, lineEndIndex - contentLengthIndex - 1));
-                                }
-                                else contentLength = 0;
-
-                                AddToLogBox(requestType + "\r\n");
-                                AddToLogBox(uri + "\r\n");
-                                AddToLogBox(contentLength.ToString() + "\r\n");
-
-                                parsingHeader = false;
-                            }
-                            if (data == "\n")
-                            {
-                                isLineBlank = true;
-                            }
-                            else if (data != "\r")
-                            {
-                                isLineBlank = false;
-                            }
-                        }
-                        else if (!parsingHeader)
-                        {
-                            bytes[dataBytesReceived++] = received[0];
-
-                        }
-
-                        if (dataBytesReceived == contentLength && !parsingHeader)
-                        {
-                            AddToLogBox(dataBytesReceived.ToString() + " Bytes Recevied\r\n");
-                            processHTTP(stream, requestType, uri, bytes, dataBytesReceived, ref curMethod);
-                            parsingHeader = true;
-                            request = "";
-                            dataBytesReceived = 0;
-                        }
-
-
-                    }
-                    else
-                    {
-                        bytes[encDataReceived++] = received[0];
-                        if (encDataReceived == 2)
-                        {
-                            encDataExpected = bytes[0] + bytes[1] * 0x100;
-                            AddToLogBox("Encrypted data expected: " + encDataExpected.ToString() + "\r\n");
-                        }
-                        if (encDataReceived == encDataExpected + 2 + 16)
-                        {
-                            Byte[] msg;
-
-                            if (AEADDecrypt(bytes, controlToAccKey, controlToAccNonce, encDataReceived, out msg))
-                            {
-                                AddToLogBox(Encoding.UTF8.GetString(msg) + "\r\n");
-                                controlToAccNonce = UInt64cInc(controlToAccNonce);
-                                encDataExpected = 0;
-                                request = Encoding.UTF8.GetString(msg);
-
-                                if (request.Substring(0, 4) == "POST") requestType = "POST";
-                                else if (request.Substring(0,3) =="GET") requestType = "GET";
-                                else if (request.Substring(0, 3) == "PUT") requestType = "PUT";
-
-                                int slashIndex = request.IndexOf('/');
-                                int spaceIndex = request.IndexOf(' ', slashIndex);
-                                uri = request.Substring(slashIndex, spaceIndex - slashIndex);
-                                int contentLengthIndex;
-
-                                if ((contentLengthIndex = request.IndexOf("Content-Length:") + 15) != 14)
-                                {
-                                    int lineEndIndex = request.IndexOf('\r', contentLengthIndex);
-                                    contentLength = int.Parse(request.Substring(contentLengthIndex + 1, lineEndIndex - contentLengthIndex - 1));
-                                }
-                                else contentLength = 0;
-
-                                Byte[] contentBytes = new Byte[contentLength];
-
-                                int contentStart = 0;
-                                for (int j=0; j< msg.Length-4;j++)
-                                {
-                                    if ((msg[j] == 0x0d) && (msg[j + 1] == 0x0a) && (msg[j + 2] == 0x0d) && (msg[j + 3] == 0x0a))
+                                    if (curSession.parsingHeader)
                                     {
-                                        contentStart = j + 4;
-                                        break;
+                                        // Translate data bytes to a ASCII string.
+                                        string data = System.Text.Encoding.ASCII.GetString(received, 0, i);
+                                        curSession.request += data;
+
+                                        if (data == "\n" && curSession.isLineBlank)
+                                        {
+                                            //AddToLogBox(curSession.request + "End" + "\r\n");
+
+                                            if (curSession.request.Substring(0, 4) == "POST")
+                                            {
+                                                curSession.requestType = "POST";
+                                            }
+                                            int slashIndex = curSession.request.IndexOf('/');
+                                            int spaceIndex = curSession.request.IndexOf(' ', slashIndex);
+                                            curSession.uri = curSession.request.Substring(slashIndex, spaceIndex - slashIndex);
+                                            int contentLengthIndex;
+
+                                            if ((contentLengthIndex = curSession.request.IndexOf("Content-Length:") + 15) != 15)
+                                            {
+                                                int lineEndIndex = curSession.request.IndexOf('\r', contentLengthIndex);
+                                                curSession.contentLength = int.Parse(curSession.request.Substring(contentLengthIndex + 1, lineEndIndex - contentLengthIndex - 1));
+                                            }
+                                            else curSession.contentLength = 0;
+
+                                            AddToLogBox(curSession.client.Client.RemoteEndPoint.ToString() + "\r\n");
+                                            AddToLogBox(curSession.requestType + "\r\n");
+                                            AddToLogBox(curSession.uri + "\r\n");
+                                            AddToLogBox(curSession.contentLength.ToString() + "\r\n");
+
+                                            curSession.parsingHeader = false;
+                                        }
+                                        if (data == "\n")
+                                        {
+                                            curSession.isLineBlank = true;
+                                        }
+                                        else if (data != "\r")
+                                        {
+                                            curSession.isLineBlank = false;
+                                        }
                                     }
+                                    else if (!curSession.parsingHeader)
+                                    {
+                                        curSession.dataBytes[curSession.dataBytesReceived++] = received[0];
+
+                                    }
+
+                                    if (curSession.dataBytesReceived == curSession.contentLength && !curSession.parsingHeader)
+                                    {
+                                        AddToLogBox(curSession.client.Client.RemoteEndPoint.ToString() + ": "+ curSession.dataBytesReceived.ToString() + " Bytes Recevied\r\n");
+                                        processHTTP(ref curSession);
+                                        curSession.parsingHeader = true;
+                                        curSession.request = "";
+                                        curSession.dataBytesReceived = 0;
+                                    }
+
+
                                 }
-                                for (int j = contentStart; j < msg.Length && (j - contentStart) < contentLength; j++)
+                                else
                                 {
-                                    contentBytes[j - contentStart] = msg[j];
+                                    curSession.dataBytes[curSession.encDataReceived++] = received[0];
+                                    if (curSession.encDataReceived == 2)
+                                    {
+                                        curSession.encDataExpected = curSession.dataBytes[0] + curSession.dataBytes[1] * 0x100;
+                                        AddToLogBox("Encrypted data expected: " + curSession.encDataExpected.ToString() + "\r\n");
+                                    }
+                                    if (curSession.encDataReceived == curSession.encDataExpected + 2 + 16)
+                                    {
+                                        Byte[] msg;
+
+                                        if (AEADDecrypt(curSession.dataBytes, curSession.controlToAccKey, curSession.controlToAccNonce, curSession.encDataReceived, out msg))
+                                        {
+                                            AddToLogBox(Encoding.UTF8.GetString(msg) + "\r\n");
+                                            curSession.controlToAccNonce = UInt64cInc(curSession.controlToAccNonce);
+                                            curSession.encDataExpected = 0;
+                                            curSession.request = Encoding.UTF8.GetString(msg);
+
+                                            if (curSession.request.Substring(0, 4) == "POST") curSession.requestType = "POST";
+                                            else if (curSession.request.Substring(0, 3) == "GET") curSession.requestType = "GET";
+                                            else if (curSession.request.Substring(0, 3) == "PUT") curSession.requestType = "PUT";
+
+                                            int slashIndex = curSession.request.IndexOf('/');
+                                            int spaceIndex = curSession.request.IndexOf(' ', slashIndex);
+                                            curSession.uri = curSession.request.Substring(slashIndex, spaceIndex - slashIndex);
+                                            int contentLengthIndex;
+
+                                            if ((contentLengthIndex = curSession.request.IndexOf("Content-Length:") + 15) != 14)
+                                            {
+                                                int lineEndIndex = curSession.request.IndexOf('\r', contentLengthIndex);
+                                                curSession.contentLength = int.Parse(curSession.request.Substring(contentLengthIndex + 1, lineEndIndex - contentLengthIndex - 1));
+                                            }
+                                            else curSession.contentLength = 0;
+
+
+
+                                            int contentStart = 0;
+                                            for (int j = 0; j < msg.Length - 4; j++)
+                                            {
+                                                if ((msg[j] == 0x0d) && (msg[j + 1] == 0x0a) && (msg[j + 2] == 0x0d) && (msg[j + 3] == 0x0a))
+                                                {
+                                                    contentStart = j + 4;
+                                                    break;
+                                                }
+                                            }
+                                            for (int j = contentStart; j < msg.Length && (j - contentStart) < curSession.contentLength; j++)
+                                            {
+                                                curSession.dataBytes[j - contentStart] = msg[j];
+                                            }
+
+                                            processHTTP(ref curSession);
+                                            curSession.encDataReceived = 0;
+
+
+                                        }
+                                        else
+                                        {
+                                            AddToLogBox("Encoded session decrypt fail\r\n");
+                                            curSession.encryptedSession = false;
+                                            curSession.connectionToClose = true;
+                                            break;
+                                        }
+
+
+
+                                    }
+
                                 }
 
-                                processHTTP(stream, requestType, uri, contentBytes, contentLength, ref curMethod);
-                                encDataReceived = 0;
-
-
                             }
-                            else
-                            {
-                                AddToLogBox("Encoded session decrypt fail\r\n");
-                                encryptedSession = false;
-                                connectionToClose = true;
-                                break;
-                            }
-
-
+                           
+                            
 
                         }
+                        else
+                        {
 
+                            if (curSession.client.Client.Poll(1, SelectMode.SelectRead))
+                                closeSession(ref curSession);
+                        }
                     }
-
-                }
-
-                client.Close();
-                AddToLogBox("Conenction Closed\r\n");
-                connectionToClose = false;
-                encryptedSession = false;
+                  
+                }  
+                loopCount++;
+                if (!dataReceived) Thread.Sleep(cycleDelay);
+                if (stateEventQueued) sendStateEvent();
             }
 
 
 
         }
+        
+        void sendStateEvent()
+        {
+            for (int i = 0; i< sessions.Length; i++)
+            {
+                Session curSession = sessions[i];
+                if (sessionActive(curSession) && curSession.evOn)
+                {
+                    String valueString = light ? "1" : "0";
+                    sendHAPEvent(ref curSession, "1", "14", valueString);
+                }
+            }
+            stateEventQueued = false;
+        }
+
+        bool sessionActive(Session curSession)
+        {
+            if (curSession is null) return false;
+            if (curSession.client is null) return false;
+            if (!curSession.client.Connected) return false;
+            return true;
+        }
+
+        bool activePairingId(int pairingID)
+        {
+            if (pairingID == -1) return true;
+            if (pairings[pairingID].dataDevicePairingID is null) return false;
+            else return true;
+        }
+
+        void closeSession(ref Session curSession)
+        {
+            {
+                AddToLogBox(curSession.client.Client.RemoteEndPoint.ToString() + ": Conenction Closed\r\n");
+                curSession.client.Close();
+                curSession.connectionToClose = false;
+                curSession.encryptedSession = false;
+                numConnects--;
+                updateNumConnects();
+                curSession = null;
+            }
 
 
-        void processHTTP(NetworkStream stream, String requestType, String uri, Byte[] bytes, int dataBytesReceived, ref Byte curMethod)
+        }
+
+        int findEmptySession()
+        {
+            for (int i=0; i< sessions.Length; i++)
+            {
+                if (sessions[i] is null) return i;
+                if (!sessions[i].client.Connected) return i;
+            }
+            return -1;
+        }
+        private void updateNumConnects()
+        {
+            label1.BeginInvoke((MethodInvoker)delegate ()
+            {
+                label1.Text = numConnects.ToString();
+            });
+        }
+
+        void processHTTP(ref Session curSession)
         {
             int queryStringPos;
             string queryString = "";
-            if ((queryStringPos = uri.IndexOf('?')) != -1)
+            if ((queryStringPos = curSession.uri.IndexOf('?')) != -1)
             {
-                queryString = uri.Substring(queryStringPos + 1, uri.Length - queryStringPos - 1);
-                uri = uri.Substring(0, queryStringPos);
+                queryString = curSession.uri.Substring(queryStringPos + 1, curSession.uri.Length - queryStringPos - 1);
+                curSession.uri = curSession.uri.Substring(0, queryStringPos);
             }
 
-            switch (requestType)
+            switch (curSession.requestType)
             {
                 case "POST":
                     {
-                        switch (uri)
+                        switch (curSession.uri)
                         {
                             case "/pair-setup":
                                 {
-                                    Byte[] TLVState = findTLVKey(bytes, 0x06, dataBytesReceived);
+                                    Byte[] TLVState = findTLVKey(curSession.dataBytes, 0x06, curSession.dataBytesReceived);
                                     if (TLVState == null || TLVState.Length == 0) break;
                                     int state = TLVState[0];
-                                    AddToLogBox("Setup State: " + state + "\r\n");
+                                    AddToLogBox(curSession.client.Client.RemoteEndPoint.ToString() + ": Setup State: " + state + "\r\n");
                                     switch (state)
                                     {
                                         case 1:
@@ -648,7 +802,7 @@ namespace HomeKit_Test
                                                 if (paired)
                                                 {
                                                     Byte[] responseBytes = new Byte[] { 0x06, 0x01, 0x02, 0x07, 0x01, 0x06 };
-                                                    sendTLVResponse(stream, responseBytes);
+                                                    sendTLVResponse(curSession, responseBytes);
 
 
                                                 }
@@ -656,22 +810,22 @@ namespace HomeKit_Test
                                                 {
 
 
-                                                    storeds = byteGenRandom(16);
+                                                    pairSetupContext.s = byteGenRandom(16);
 
-                                                    storedx = generatePrivateKey(toUInt32Array(storeds), userName, DeviceCode);
-                                                    storedv = generateVerifier(storedx);
-                                                    storedk = generateMultiplier();
+                                                    UInt32[] storedx = generatePrivateKey(toUInt32Array(pairSetupContext.s), userName, DeviceCode);
+                                                    pairSetupContext.v = generateVerifier(storedx);
+                                                    pairSetupContext.k = generateMultiplier();
                                                     //storedA = generatePublicA(a);
-                                                    storedb = toUInt32Array(byteGenRandom(32));
-                                                    storedB = generatePublicB(storedk, storedv, storedb);
+                                                    pairSetupContext.b = toUInt32Array(byteGenRandom(32));
+                                                    pairSetupContext.B = generatePublicB(pairSetupContext.k, pairSetupContext.v, pairSetupContext.b);
 
 
                                                     Byte[] TLVResponse = new byte[0];
                                                     appendTLVBytes(ref TLVResponse, 0x06, new byte[] { 0x02 });
-                                                    appendTLVBytes(ref TLVResponse, 0x02, storeds);
-                                                    appendTLVBytes(ref TLVResponse, 0x03, fromUInt32Array(storedB));
+                                                    appendTLVBytes(ref TLVResponse, 0x02, pairSetupContext.s);
+                                                    appendTLVBytes(ref TLVResponse, 0x03, fromUInt32Array(pairSetupContext.B));
 
-                                                    sendTLVResponse(stream, TLVResponse);
+                                                    sendTLVResponse(curSession, TLVResponse);
 
                                                 }
 
@@ -679,21 +833,21 @@ namespace HomeKit_Test
                                             }
                                         case 3:
                                             {
-                                                Byte[] publicA = findTLVKey(bytes, 0x03, dataBytesReceived);
-                                                Byte[] proofA = findTLVKey(bytes, 0x04, dataBytesReceived);
+                                                Byte[] publicA = findTLVKey(curSession.dataBytes, 0x03, curSession.dataBytesReceived);
+                                                Byte[] proofA = findTLVKey(curSession.dataBytes, 0x04, curSession.dataBytesReceived);
 
                                                 UInt32[] publicAUInt32 = toUInt32Array(publicA);
                                                 publicAUInt32 = UInt32ArrayMod(publicAUInt32, N);
                                                 if (UInt32ArrayCmpNoSign(publicAUInt32, new UInt32[] { 0x0 }) == 0)
                                                 {
                                                     AddToLogBox("A mod N == 0\r\n");
-                                                    sendPairingError(stream, 0x04, 0x02);
+                                                    sendPairingError(curSession, 0x04, 0x02);
                                                     break;
                                                 }
 
-                                                storedu = generateScrambling(toUInt32Array(publicA), storedB);
-                                                storedS = generateSessionSecret(toUInt32Array(publicA), storedv, storedu, storedb);
-                                                storedK = generateSessionKey(storedS);
+                                                pairSetupContext.u = generateScrambling(toUInt32Array(publicA), pairSetupContext.B);
+                                                UInt32[] storedS = generateSessionSecret(toUInt32Array(publicA), pairSetupContext.v, pairSetupContext.u, pairSetupContext.b);
+                                                pairSetupContext.K = generateSessionKey(storedS);
 
                                                 Byte[] hashN = genSHA512(N);
                                                 Byte[] gPad = new byte[1];
@@ -702,10 +856,10 @@ namespace HomeKit_Test
                                                 Byte[] NxorG = new Byte[hashN.Length];
                                                 for (int i = 0; i < NxorG.Length; i++) NxorG[i] = (byte)(hashN[i] ^ hashG[i]);
                                                 Byte[] hashI = genSHA512(userName);
-                                                Byte[] publicB = fromUInt32Array(storedB);
-                                                Byte[] K = fromUInt32Array(storedK);
+                                                Byte[] publicB = fromUInt32Array(pairSetupContext.B);
+                                                Byte[] K = fromUInt32Array(pairSetupContext.K);
 
-                                                Byte[] localProofA = genSHA512(NxorG, hashI, storeds, publicA, publicB, K);
+                                                Byte[] localProofA = genSHA512(NxorG, hashI, pairSetupContext.s, publicA, publicB, K);
 
 
 
@@ -721,7 +875,7 @@ namespace HomeKit_Test
                                                 if (!byteArrayEqual(proofA, localProofA))
                                                 {
                                                     AddToLogBox("Client Proof Mismatch\r\n");
-                                                    sendPairingError(stream, 0x04, 0x02);
+                                                    sendPairingError(curSession, 0x04, 0x02);
                                                     break;
                                                 }
 
@@ -732,7 +886,7 @@ namespace HomeKit_Test
                                                 Byte[] TLVResponse = new byte[0];
                                                 appendTLVBytes(ref TLVResponse, 0x06, new byte[] { 0x04 });
                                                 appendTLVBytes(ref TLVResponse, 0x04, proofB);
-                                                sendTLVResponse(stream, TLVResponse);
+                                                sendTLVResponse(curSession, TLVResponse);
 
                                                 AddToLogBox("Server Proof Sent\r\n");
 
@@ -741,8 +895,8 @@ namespace HomeKit_Test
                                             }
                                         case 5:
                                             {
-                                                Byte[] encData = findTLVKey(bytes, 0x05, dataBytesReceived);
-                                                Byte[] chachaKey = genHKDFSHA512(fromUInt32Array(storedK), "Pair-Setup-Encrypt-Salt", "Pair-Setup-Encrypt-Info", 32);
+                                                Byte[] encData = findTLVKey(curSession.dataBytes, 0x05, curSession.dataBytesReceived);
+                                                Byte[] chachaKey = genHKDFSHA512(fromUInt32Array(pairSetupContext.K), "Pair-Setup-Encrypt-Salt", "Pair-Setup-Encrypt-Info", 32);
                                                 Byte[] nonce = Encoding.UTF8.GetBytes("PS-Msg05");
 
                                                 Byte[] subTLV = new byte[encData.Length - 16];
@@ -754,7 +908,7 @@ namespace HomeKit_Test
                                                 if (verifyAuthTag(subTLV, authTag, chachaKey, nonce)) AddToLogBox("M5 decrypt successful\r\n");
                                                 else
                                                 {
-                                                    sendPairingError(stream, 0x06, 0x02);
+                                                    sendPairingError(curSession, 0x06, 0x02);
                                                     AddToLogBox("M5 Auth Tag Fail\r\n");
                                                     break;
                                                 }
@@ -767,7 +921,7 @@ namespace HomeKit_Test
 
                                                 pairings[0].dataPermissions = 0x01;
 
-                                                Byte[] deviceX = genHKDFSHA512(fromUInt32Array(storedK), "Pair-Setup-Controller-Sign-Salt", "Pair-Setup-Controller-Sign-Info", 32);
+                                                Byte[] deviceX = genHKDFSHA512(fromUInt32Array(pairSetupContext.K), "Pair-Setup-Controller-Sign-Salt", "Pair-Setup-Controller-Sign-Info", 32);
                                                 Byte[] deviceInfo = deviceX.Concat(pairings[0].dataDevicePairingID).Concat(pairings[0].dataDeviceLTPK).ToArray();
 
                                                 AddToLogBox(Encoding.UTF8.GetString(pairings[0].dataDevicePairingID) + "\r\n");
@@ -780,7 +934,7 @@ namespace HomeKit_Test
                                                 Byte[] pairingID = getAccessoryPairingIDBytes(dataPairingID);
 
                                                 
-                                                Byte[] accessoryX = genHKDFSHA512(fromUInt32Array(storedK), "Pair-Setup-Accessory-Sign-Salt", "Pair-Setup-Accessory-Sign-Info", 32);
+                                                Byte[] accessoryX = genHKDFSHA512(fromUInt32Array(pairSetupContext.K), "Pair-Setup-Accessory-Sign-Salt", "Pair-Setup-Accessory-Sign-Info", 32);
                                                 Byte[] accessoryInfo = accessoryX.Concat(pairingID).Concat(accessoryLTPK).ToArray();
 
                                                 Byte[] accessorySignature = ed25519sign(dataAccessoryLTSK, accessoryInfo);
@@ -801,7 +955,7 @@ namespace HomeKit_Test
                                                 appendTLVBytes(ref response, 0x06, new byte[] { 0x06 });
                                                 appendTLVBytes(ref response, 0x05, respData);
 
-                                                sendTLVResponse(stream, response);
+                                                sendTLVResponse(curSession, response);
 
 
                                                 AddToLogBox(verifyAuthTag(encData, authTag, chachaKey, nonce).ToString() + "\r\n");
@@ -822,24 +976,24 @@ namespace HomeKit_Test
                             case "/pair-verify":
                                 {
 
-                                    Byte[] TLVState = findTLVKey(bytes, 0x06, dataBytesReceived);
+                                    Byte[] TLVState = findTLVKey(curSession.dataBytes, 0x06, curSession.dataBytesReceived);
                                     if (TLVState == null || TLVState.Length == 0) break;
                                     int state = TLVState[0];
-                                    AddToLogBox("Verify State: " + state + "\r\n");
+                                    AddToLogBox(curSession.client.Client.RemoteEndPoint.ToString() + ": Verify State: " + state + "\r\n");
 
                                     switch (state)
                                     {
                                         case 0x01:
                                             {
-                                                devicePublicKey = findTLVKey(bytes, 0x03, dataBytesReceived);
+                                                curSession.devicePublicKey = findTLVKey(curSession.dataBytes, 0x03, curSession.dataBytesReceived);
                                                 Byte[] accessoryPrivateKey = byteGenRandom(32);
-                                                accessoryPublicKey = c25519Public(accessoryPrivateKey);
-                                                sharedKey = c25519Shared(accessoryPrivateKey, devicePublicKey);
+                                                curSession.accessoryPublicKey = c25519Public(accessoryPrivateKey);
+                                                curSession.sharedKey = c25519Shared(accessoryPrivateKey, curSession.devicePublicKey);
 
-                                                Byte[] accessoryInfo = accessoryPublicKey;
+                                                Byte[] accessoryInfo = curSession.accessoryPublicKey;
                                                 Byte[] pairingID = getAccessoryPairingIDBytes(dataPairingID);
                                                 accessoryInfo = accessoryInfo.Concat(pairingID).ToArray();
-                                                accessoryInfo = accessoryInfo.Concat(devicePublicKey).ToArray();
+                                                accessoryInfo = accessoryInfo.Concat(curSession.devicePublicKey).ToArray();
 
                                                 Byte[] signature = ed25519sign(dataAccessoryLTSK, accessoryInfo);
 
@@ -847,26 +1001,26 @@ namespace HomeKit_Test
                                                 appendTLVBytes(ref subTLV, 0x01, pairingID);
                                                 appendTLVBytes(ref subTLV, 0x0a, signature);
 
-                                                sessionKey = genHKDFSHA512(sharedKey, "Pair-Verify-Encrypt-Salt", "Pair-Verify-Encrypt-Info", 32);
+                                                curSession.sessionKey = genHKDFSHA512(curSession.sharedKey, "Pair-Verify-Encrypt-Salt", "Pair-Verify-Encrypt-Info", 32);
 
                                                 Byte[] nonce = Encoding.UTF8.GetBytes("PV-Msg02");
-                                                Byte[] encData = chacha20(sessionKey, nonce, subTLV, 1);
-                                                Byte[] authTag = genAuthTag(encData, sessionKey, nonce);
+                                                Byte[] encData = chacha20(curSession.sessionKey, nonce, subTLV, 1);
+                                                Byte[] authTag = genAuthTag(encData, curSession.sessionKey, nonce);
                                                 Byte[] respData = encData.Concat(authTag).ToArray();
 
                                                 Byte[] response = new Byte[0];
                                                 appendTLVBytes(ref response, 0x06, new Byte[] { 0x02 });
-                                                appendTLVBytes(ref response, 0x03, accessoryPublicKey);
+                                                appendTLVBytes(ref response, 0x03, curSession.accessoryPublicKey);
                                                 appendTLVBytes(ref response, 0x05, respData);
 
-                                                sendTLVResponse(stream, response);
+                                                sendTLVResponse(curSession, response);
 
                                                 break;
                                             }
 
                                         case 0x03:
                                             {
-                                                Byte[] encData = findTLVKey(bytes, 0x05, dataBytesReceived);
+                                                Byte[] encData = findTLVKey(curSession.dataBytes, 0x05, curSession.dataBytesReceived);
                                                 Byte[] nonce = Encoding.UTF8.GetBytes("PV-Msg03");
                                                 Byte[] subTLV = new byte[encData.Length - 16];
                                                 Byte[] authTag = new byte[16];
@@ -874,41 +1028,42 @@ namespace HomeKit_Test
                                                 for (int i = 0; i < subTLV.Length; i++) subTLV[i] = encData[i];
                                                 for (int i = 0; i < 16; i++) authTag[i] = encData[encData.Length - 16 + i];
 
-                                                if (verifyAuthTag(subTLV, authTag, sessionKey, nonce)) AddToLogBox("M3 Verify decrypt successful\r\n");
+                                                if (verifyAuthTag(subTLV, authTag, curSession.sessionKey, nonce)) AddToLogBox("M3 Verify decrypt successful\r\n");
                                                 else
                                                 {
-                                                    sendPairingError(stream, 0x04, 0x02);
+                                                    sendPairingError(curSession, 0x04, 0x02);
                                                     AddToLogBox("Verify M3 Auth Tag Fail\r\n");
                                                     break;
                                                 }
 
-                                                subTLV = chacha20(sessionKey, nonce, subTLV, 1);
+                                                subTLV = chacha20(curSession.sessionKey, nonce, subTLV, 1);
 
                                                 Byte[] receivedPairingID = findTLVKey(subTLV, 0x01, subTLV.Length);
                                                 Byte[] receivedSignature = findTLVKey(subTLV, 0x0a, subTLV.Length);
 
                                                 int pairingID = findPairingIdIndex(receivedPairingID);
+                                                curSession.pairingID = pairingID;
                                                 if (pairingID == -1)
                                                 {
-                                                    sendPairingError(stream, 0x04, 0x02);
+                                                    sendPairingError(curSession, 0x04, 0x02);
                                                     AddToLogBox("Received pairing ID not found\r\n");
                                                     break;
                                                 }
 
 
-                                                AddToLogBox("receivedPairingID\r\n");
-                                                addBytesToLogBox(receivedPairingID);
-                                                addBytesToLogBox(pairings[0].dataDevicePairingID);
+                                                //AddToLogBox("receivedPairingID\r\n");
+                                                //addBytesToLogBox(receivedPairingID);
+                                                //addBytesToLogBox(pairings[pairingID].dataDevicePairingID);
 
-                                                Byte[] deviceInfo = devicePublicKey;
+                                                Byte[] deviceInfo = curSession.devicePublicKey;
                                                 deviceInfo = deviceInfo.Concat(receivedPairingID).ToArray();
-                                                deviceInfo = deviceInfo.Concat(accessoryPublicKey).ToArray();
+                                                deviceInfo = deviceInfo.Concat(curSession.accessoryPublicKey).ToArray();
 
-                                                bool result = ed25519verify(pairings[0].dataDeviceLTPK, deviceInfo, receivedSignature);
+                                                bool result = ed25519verify(pairings[pairingID].dataDeviceLTPK, deviceInfo, receivedSignature);
                                                 AddToLogBox("Verify M3 signature status: " + result);
                                                 if (!result)
                                                 {
-                                                    sendPairingError(stream, 0x04, 0x02);
+                                                    sendPairingError(curSession, 0x04, 0x02);
                                                     AddToLogBox("Verify M3 Signature Fail\r\n");
                                                     break;
                                                 }
@@ -916,13 +1071,13 @@ namespace HomeKit_Test
                                                 Byte[] response = new Byte[0];
                                                 appendTLVBytes(ref response, 0x06, new Byte[] { 0x04 });
 
-                                                sendTLVResponse(stream, response);
+                                                sendTLVResponse(curSession, response);
 
-                                                accToControlKey = genHKDFSHA512(sharedKey, "Control-Salt", "Control-Read-Encryption-Key", 32);
-                                                controlToAccKey = genHKDFSHA512(sharedKey, "Control-Salt", "Control-Write-Encryption-Key", 32);
-                                                encryptedSession = true;
-                                                accToControlNonce = UInt64cAssign(0);
-                                                controlToAccNonce = UInt64cAssign(0);
+                                                curSession.accToControlKey = genHKDFSHA512(curSession.sharedKey, "Control-Salt", "Control-Read-Encryption-Key", 32);
+                                                curSession.controlToAccKey = genHKDFSHA512(curSession.sharedKey, "Control-Salt", "Control-Write-Encryption-Key", 32);
+                                                curSession.encryptedSession = true;
+                                                curSession.accToControlNonce = UInt64cAssign(0);
+                                                curSession.controlToAccNonce = UInt64cAssign(0);
 
                                                 break;
                                             }
@@ -934,21 +1089,22 @@ namespace HomeKit_Test
                                 }
                             case "/pairings":
                                 {
-                                    Byte[] TLVMethod = findTLVKey(bytes, 0x00, dataBytesReceived);
+                                    Byte[] TLVMethod = findTLVKey(curSession.dataBytes, 0x00, curSession.contentLength);
                                     if (TLVMethod == null || TLVMethod.Length == 0) break;
-                                    curMethod = TLVMethod[0];
-                                    AddToLogBox("Pairing Method: " + curMethod + "\r\n");
+                                    curSession.curMethod = TLVMethod[0];
+                                    AddToLogBox("Pairing Method: " + curSession.curMethod + "\r\n");
 
-                                    switch (curMethod)
+                                    switch (curSession.curMethod)
                                     {
                                         case 0x03:
                                             {
-                                                AddToLogBox("Add Pairing\r\n");
-                                                Byte[] pairingID = findTLVKey(bytes, 0x01, dataBytesReceived);
-                                                Byte[] pairingLTPK = findTLVKey(bytes, 0x03, dataBytesReceived);
-                                                Byte[] pairingPermissions = findTLVKey(bytes, 0x0B, dataBytesReceived);
+                                                AddToLogBox(curSession.client.Client.RemoteEndPoint.ToString() + ": Add Pairing\r\n");
+                                                Byte[] pairingID = findTLVKey(curSession.dataBytes, 0x01, curSession.contentLength);
+                                                Byte[] pairingLTPK = findTLVKey(curSession.dataBytes, 0x03, curSession.contentLength);
+                                                Byte[] pairingPermissions = findTLVKey(curSession.dataBytes, 0x0B, curSession.contentLength);
 
-                                                addBytesToLogBox(pairingID);
+                                                AddToLogBox(Encoding.UTF8.GetString(pairingID) + "\r\n");
+                                                
                                                 AddToLogBox("\r\n");
                                                 AddToLogBox("Pairing Permissions: " + pairingPermissions[0].ToString() + "\r\n");
 
@@ -963,13 +1119,13 @@ namespace HomeKit_Test
                                                     {
                                                         pairings[pairingIndex].dataPermissions = pairingPermissions[0];
                                                         AddToLogBox("Pairing " + pairingIndex + " Updated\r\n");
-                                                        sendHAPResponse(stream, "200", response);
+                                                        sendHAPResponse(ref curSession, "200", response, contentType: "application/pairing+tlv8");
                                                         break;
                                                     }
                                                     else
                                                     {
                                                         appendTLVBytes(ref response, 0x07, new byte[] { 0x01 });
-                                                        sendHAPResponse(stream, "200", response);
+                                                        sendHAPResponse(ref curSession, "200", response, contentType: "application/pairing+tlv8");
                                                         AddToLogBox("Pairing " + pairingIndex + " LTPK Error\r\n");
                                                         break;
                                                     }
@@ -981,7 +1137,7 @@ namespace HomeKit_Test
                                                 if (pairingIndex == -1)
                                                 {
                                                     appendTLVBytes(ref response, 0x07, new byte[] { 0x04 });
-                                                    sendHAPResponse(stream, "200", response);
+                                                    sendHAPResponse(ref curSession, "200", response);
                                                     AddToLogBox("Too many pairings\r\n");
                                                     break;
                                                 }
@@ -991,16 +1147,16 @@ namespace HomeKit_Test
                                                 pairings[pairingIndex].dataPermissions = pairingPermissions[0];
 
                                                 AddToLogBox("Pairing " + pairingIndex + " Added\r\n");
-                                                sendHAPResponse(stream, "200", response, contentType: "application/pairing+tlv8");
+                                                sendHAPResponse(ref curSession, "200", response, contentType: "application/pairing+tlv8");
                                                 writeCfg();
                                                 break;
                                             }
                                         case 0x04:
                                             {
-                                                AddToLogBox("Remove Pairing\r\n");
+                                                AddToLogBox(curSession.client.Client.RemoteEndPoint.ToString() + ": Remove Pairing\r\n");
 
-                                                Byte[] pairingID = TLVMethod = findTLVKey(bytes, 0x01, dataBytesReceived);
-                                                addBytesToLogBox(pairingID);
+                                                Byte[] pairingID = TLVMethod = findTLVKey(curSession.dataBytes, 0x01, curSession.contentLength);
+                                                AddToLogBox(Encoding.UTF8.GetString(pairingID) + "\r\n");
                                                 int pairingIndex = findPairingIdIndex(pairingID);
                                                 AddToLogBox("Pairing Index: " + pairingIndex.ToString() + " Removed\r\n");
                                                 pairings[pairingIndex].dataDevicePairingID = null;
@@ -1010,7 +1166,7 @@ namespace HomeKit_Test
                                                 Byte[] response = new Byte[0];
                                                 appendTLVBytes(ref response, 0x06, new byte[] { 0x02 });
 
-                                                sendHAPResponse(stream, "200", response, contentType: "application/pairing+tlv8");
+                                                sendHAPResponse(ref curSession, "200", response, contentType: "application/pairing+tlv8");
                                                 if (pairingIndex == 0)
                                                 {
                                                     updateBonjourFlag("sf", "1");
@@ -1044,11 +1200,11 @@ namespace HomeKit_Test
                 case "GET":
                     {
                         
-                        switch (uri)
+                        switch (curSession.uri)
                         {
                             case "/accessories":
                                 {
-                                    sendHAPResponse(stream, "200", Encoding.UTF8.GetBytes(constants.constants.accDB), true);
+                                    sendHAPResponse(ref curSession, "200", Encoding.UTF8.GetBytes(constants.constants.accDB), true);
                                     //sendHAPResponse(stream, "200", Encoding.UTF8.GetBytes("fuck"), true);
 
                                     
@@ -1096,19 +1252,19 @@ namespace HomeKit_Test
                                     
                                     if (fatalError)
                                     {
-                                        sendHAPResponse(stream, fatalErrorCode);
+                                        sendHAPResponse(ref curSession, fatalErrorCode);
                                     }
 
                                     else if (hasErrors)
                                     {
-                                        sendHAPResponse(stream, "207", Encoding.UTF8.GetBytes(response));
+                                        sendHAPResponse(ref curSession, "207", Encoding.UTF8.GetBytes(response));
                                         AddToLogBox("Error:\r\n" + response + "\r\n");
                                     }
                                     else
                                     {
 
                                         response = response.Replace(@", ""status"" : 0", "");
-                                        sendHAPResponse(stream, "200", Encoding.UTF8.GetBytes(response));
+                                        sendHAPResponse(ref curSession, "200", Encoding.UTF8.GetBytes(response));
                                         AddToLogBox("Success:\r\n" + response + "\r\n");
                                     }
 
@@ -1123,13 +1279,13 @@ namespace HomeKit_Test
                     }
                 case "PUT":
                     {
-                        switch (uri)
+                        switch (curSession.uri)
                         {
 
 
                             case "/characteristics":
                                 {
-                                    string jsonString = Encoding.UTF8.GetString(bytes);
+                                    string jsonString = Encoding.UTF8.GetString(curSession.dataBytes,0, curSession.contentLength);
                                     AddToLogBox("jsonString:\r\n" + jsonString + "\r\n");
 
                                     int curPos = jsonString.IndexOf("[");
@@ -1191,12 +1347,12 @@ namespace HomeKit_Test
 
                                         if (valueString != null)
                                         {
-                                            status = handleCharacteristicWrite(stream, aidString, iidString, valueString);
+                                            status = handleCharacteristicWrite(aidString, iidString, valueString);
                                             AddToLogBox("aid: " + aidString + " iid: " + iidString + " value: " + valueString + " status: " + status.ToString() + "\r\n");
                                         }
                                         else if (evString != null)
                                         {
-                                            status = handleCharacteristicEvent(stream, aidString, iidString, evString); 
+                                            status = handleCharacteristicEvent(aidString, iidString, evString, ref curSession); 
                                             AddToLogBox("aid: " + aidString + " iid: " + iidString + " ev: " + evString + " status: " + status.ToString() + "\r\n");
                                             if (status == 0 && UInt32.Parse(iidString) == 10) queueAccessoryFlageEvent = true;
                                         }
@@ -1217,12 +1373,12 @@ namespace HomeKit_Test
 
                                     if (!hasErrors)
                                     {
-                                        sendHAPResponse(stream, "204");
+                                        sendHAPResponse(ref curSession, "204");
                                         AddToLogBox("No Errors\r\n");
                                     }
                                     else
                                     {
-                                        sendHAPResponse(stream, "207", Encoding.UTF8.GetBytes(response));
+                                        sendHAPResponse(ref curSession, "207", Encoding.UTF8.GetBytes(response));
                                         AddToLogBox("Error:\r\n" + response + "\r\n");
                                     }
 
@@ -1253,7 +1409,7 @@ namespace HomeKit_Test
                 {
                     case 14:
                         {
-                            if (identifyBox.Checked) value = "true";
+                            if (light) value = "true";
                             else value = "false";
                             break;
                         }
@@ -1281,10 +1437,10 @@ namespace HomeKit_Test
 
         }
 
-        private void sendHAPEvent(NetworkStream stream, string aidString, string iidString, string valueString)
+        private void sendHAPEvent(ref Session curSession, string aidString, string iidString, string valueString)
         {
             string response = @"{""characteristics"" : [{""aid"" : " + aidString + @", ""iid"" : " + iidString + @", ""value"" : " + valueString + "}]}";
-            sendHAPResponse(stream, "200", Encoding.UTF8.GetBytes(response), isEvent: true);
+            sendHAPResponse(ref curSession, "200", Encoding.UTF8.GetBytes(response), isEvent: true);
             AddToLogBox("Event Response: " + response + "\r\n");
         }
 
@@ -1326,7 +1482,7 @@ namespace HomeKit_Test
             return @"{""aid"" : " + aidString + @", ""iid"" : " + iidString + @", ""value"" : " + value + "}";
         }
 
-        int handleCharacteristicWrite(NetworkStream stream, String aidString, String iidString, String valueString)
+        int handleCharacteristicWrite(String aidString, String iidString, String valueString)
         {
             int aid = int.Parse(aidString);
             int iid = int.Parse(iidString);
@@ -1344,8 +1500,13 @@ namespace HomeKit_Test
                     }
                 case 14:
                     {
-                        if (jsonToBool(valueString)) setIdentifyBox(true);
-                        else setIdentifyBox(false);
+                        if (jsonToBool(valueString)) light = true;
+                        else light = false;
+                            
+                        setIdentifyBox(light);
+
+                        stateEventQueued = true;
+
                         return 0;
                     }
             }
@@ -1360,7 +1521,7 @@ namespace HomeKit_Test
             if (jsonIn.Trim().Equals("1") || jsonIn.Trim().ToLowerInvariant().Equals("true")) return true;
             else return false;
         }
-        int handleCharacteristicEvent(NetworkStream stream, String aidString, String iidString, String evString)
+        int handleCharacteristicEvent(String aidString, String iidString, String evString, ref Session curSession)
         {
             int aid = int.Parse(aidString);
             int iid = int.Parse(iidString);
@@ -1371,10 +1532,16 @@ namespace HomeKit_Test
             }
             switch (iid)
             {
-                case 10:
+                case 14:
                     {
-                        if (evString.Equals("true")) evAccessoryFlagEnabled = true;
-                        else evAccessoryFlagEnabled = false;
+                        if (jsonToBool(evString)) curSession.evOn = true;
+                        else curSession.evOn = false;
+                        return 0;
+                    }
+                case 16:
+                    {
+                        if (jsonToBool(evString)) curSession.evInUse = true;
+                        else curSession.evInUse = false;
                         return 0;
                     }
                 default: return 0;
@@ -1588,12 +1755,12 @@ namespace HomeKit_Test
             return authTag;
 
         }
-        void sendPairingError(NetworkStream stream, Byte state, Byte errorCode)
+        void sendPairingError(Session curSession, Byte state, Byte errorCode)
         {
             Byte[] TLVResponse = new byte[0];
             appendTLVBytes(ref TLVResponse, 0x06, new byte[] { 0x04 });
             appendTLVBytes(ref TLVResponse, 0x07, new byte[] { 0x02 });
-            sendTLVResponse(stream, TLVResponse);
+            sendTLVResponse(curSession, TLVResponse);
         }
         
         bool byteArrayEqual(byte[] x, byte[] y)
@@ -1605,18 +1772,18 @@ namespace HomeKit_Test
             return true;
         }
         
-        void sendTLVResponse(NetworkStream stream, Byte[] responseBytes)
+        void sendTLVResponse(Session curSession, Byte[] responseBytes)
         {
-            sendHTTPResponse(stream, "200", "application/pairing+tlv8", responseBytes, responseBytes.Length);
-            AddToLogBox("Send Response: " + responseBytes.Length + "\r\n");
+            sendHTTPResponse(curSession, "200", "application/pairing+tlv8", responseBytes, responseBytes.Length);
+            AddToLogBox(curSession.client.Client.RemoteEndPoint.ToString() + ": Send Response: " + responseBytes.Length + "\r\n");
         }
 
-        void sendHAPResponse(NetworkStream stream, String responseCode)
+        void sendHAPResponse(ref Session curSession, String responseCode)
         {
-            sendHAPResponse(stream, responseCode, new Byte[0]);
+            sendHAPResponse(ref curSession, responseCode, new Byte[0]);
             return;
         }
-        void sendHAPResponse(NetworkStream stream, String responseCode, Byte[] responseBytes = null, bool chunked = false, String contentType = "application/hap+json", bool isEvent = false)
+        void sendHAPResponse(ref Session curSession, String responseCode, Byte[] responseBytes = null, bool chunked = false, String contentType = "application/hap+json", bool isEvent = false)
         {
 
             Byte[] response;
@@ -1626,7 +1793,7 @@ namespace HomeKit_Test
             Byte[] sendBuffer = new Byte[0];
 
             int curPos = 0;
-            UInt32 tempNonce = accToControlNonce.lo;
+            UInt32 tempNonce = curSession.accToControlNonce.lo;
             while (curPos < response.Length)
             {
                 int curLength = response.Length - curPos;
@@ -1636,43 +1803,43 @@ namespace HomeKit_Test
                 if (true)
                 {
 
-                    sendBuffer = sendBuffer.Concat(AEADEncrypt(frame, accToControlKey, fromUInt64cLE(accToControlNonce))).ToArray();
+                    sendBuffer = sendBuffer.Concat(AEADEncrypt(frame, curSession.accToControlKey, fromUInt64cLE(curSession.accToControlNonce))).ToArray();
                     //Byte[] tempBuffer = AEADEncrypt(frame, accToControlKey, fromUInt64cLE(accToControlNonce));
                     //stream.Write(tempBuffer, 0, tempBuffer.Length);
 
                 }
                 else
                 {
-                    sendBuffer = sendBuffer.Concat(AEADEncrypt(frame, controlToAccKey, fromUInt64cLE(controlToAccNonce))).ToArray();
+                    sendBuffer = sendBuffer.Concat(AEADEncrypt(frame, curSession.controlToAccKey, fromUInt64cLE(curSession.controlToAccNonce))).ToArray();
                     AddToLogBox("Skipped Nonce\r\n");
                 }
-                accToControlNonce = UInt64cInc(accToControlNonce);
+                curSession.accToControlNonce = UInt64cInc(curSession.accToControlNonce);
                 curPos += curLength;           
             }
 
-            AddToLogBox("Send Response: " + sendBuffer.Length + "\r\n");
-            AddToLogBox("accToControlNonce: " + accToControlNonce.hi.ToString() + accToControlNonce.lo.ToString() + "\r\n");
+            AddToLogBox(curSession.client.Client.RemoteEndPoint.ToString()+ ": Send Response: " + sendBuffer.Length + "\r\n");
+            AddToLogBox("accToControlNonce: " + curSession.accToControlNonce.hi.ToString() + curSession.accToControlNonce.lo.ToString() + "\r\n");
             //AddToLogBox(Encoding.UTF8.GetString(response) + "\r\n");
-            stream.Write(sendBuffer, 0, sendBuffer.Length);
+            curSession.stream.Write(sendBuffer, 0, sendBuffer.Length);
 
             Byte[] decrypted;
             
-            curPos = 0;
-            while (curPos < sendBuffer.Length)
-            {
-                int curLength = sendBuffer[curPos] + sendBuffer[curPos + 1] * 0x100;
-                Byte[] tempBuffer = new byte[curLength + 18];
-                for (int i = 0; i < curLength + 18; i++) tempBuffer[i] = sendBuffer[i + curPos];
-                UInt64c tempNonce64;
-                tempNonce64.lo = tempNonce; tempNonce64.hi = 0;
-                Byte[] tempResponse;
-                bool testResult = AEADDecrypt(tempBuffer, accToControlKey, tempNonce64, curLength + 2 + 16, out tempResponse);
-                AddToLogBox(testResult.ToString() + " Nonce: " + tempNonce.ToString() + " Length: " + curLength.ToString() + " Position: " + curPos.ToString() + " \r\n");
-                tempNonce++;
-                curPos += curLength + 18;
+            //curPos = 0;
+            //while (curPos < sendBuffer.Length)
+            //{
+            //    int curLength = sendBuffer[curPos] + sendBuffer[curPos + 1] * 0x100;
+            //    Byte[] tempBuffer = new byte[curLength + 18];
+            //    for (int i = 0; i < curLength + 18; i++) tempBuffer[i] = sendBuffer[i + curPos];
+            //    UInt64c tempNonce64;
+            //    tempNonce64.lo = tempNonce; tempNonce64.hi = 0;
+            //    Byte[] tempResponse;
+            //    bool testResult = AEADDecrypt(tempBuffer, curSession.accToControlKey, tempNonce64, curLength + 2 + 16, out tempResponse);
+            //    AddToLogBox(testResult.ToString() + " Nonce: " + tempNonce.ToString() + " Length: " + curLength.ToString() + " Position: " + curPos.ToString() + " \r\n");
+            //    tempNonce++;
+            //    curPos += curLength + 18;
 
-            }
-            AddToLogBox("\r\n");
+            //}
+            //AddToLogBox("\r\n");
             if (isEvent) AddToLogBox("Event Response: " + Encoding.UTF8.GetString(response) + "\r\n");
         }
 
@@ -1821,12 +1988,12 @@ namespace HomeKit_Test
         }
 
 
-        private void sendHTTPResponse(NetworkStream senderStream, string status, string contentType = null, Byte[] data = null, int dataLength = 0)
+        private void sendHTTPResponse(Session curSession, string status, string contentType = null, Byte[] data = null, int dataLength = 0)
         {
 
             Byte[] bytes = genHTTPResponse(status, contentType, data, dataLength);
 
-            senderStream.Write(bytes, 0, bytes.Length);
+            curSession.stream.Write(bytes, 0, bytes.Length);
 
             return;
 
@@ -2705,31 +2872,31 @@ namespace HomeKit_Test
         {
 
 
-            storedx = generatePrivateKey(s, "alice", "password123");
-            storedv = generateVerifier(storedx);
-            storedk = generateMultiplier();
-            storedA = generatePublicA(a);
-            storedB = generatePublicB(storedk, storedv, b);
-            storedu = generateScrambling(storedA, storedB);
-            storedS = generateSessionSecret(storedA, storedv, storedu, b);
-            storedK = generateSessionKey(storedS);
+        //    storedx = generatePrivateKey(s, "alice", "password123");
+        //    storedv = generateVerifier(storedx);
+        //    storedk = generateMultiplier();
+        //    storedA = generatePublicA(a);
+        //    storedB = generatePublicB(storedk, storedv, b);
+        //    storedu = generateScrambling(storedA, storedB);
+        //    storedS = generateSessionSecret(storedA, storedv, storedu, b);
+        //    storedK = generateSessionKey(storedS);
 
-            foreach (UInt32 i in storedK)
-            {
-                AddToLogBox(i.ToString("X8") + "\r\n");
-            }
-
-
-
-            //Byte[] zeroByte = { 0x0 };
+        //    foreach (UInt32 i in storedK)
+        //    {
+        //        AddToLogBox(i.ToString("X8") + "\r\n");
+        //    }
 
 
-            //BigInteger bigN = new BigInteger(fromUInt32Array(N).Concat(new Byte[] { 0 }).ToArray());
-            //BigInteger bigx = new BigInteger(hashBytes.Concat(zeroByte).ToArray());
-            //BigInteger bigG = new BigInteger(5);
-            //BigInteger bigv = BigInteger.ModPow(bigG, bigx, bigN);
 
-            //AddToLogBox(bigv.ToString("X8") + "\r\n");
+        //    //Byte[] zeroByte = { 0x0 };
+
+
+        //    //BigInteger bigN = new BigInteger(fromUInt32Array(N).Concat(new Byte[] { 0 }).ToArray());
+        //    //BigInteger bigx = new BigInteger(hashBytes.Concat(zeroByte).ToArray());
+        //    //BigInteger bigG = new BigInteger(5);
+        //    //BigInteger bigv = BigInteger.ModPow(bigG, bigx, bigN);
+
+        //    //AddToLogBox(bigv.ToString("X8") + "\r\n");
         }
 
         Byte[] byteArrayReverse(Byte[] a)
@@ -2837,7 +3004,7 @@ namespace HomeKit_Test
 
         UInt32[] generateSessionKey(UInt32[] S)
         {
-            Byte[] toHash = fromUInt32Array(storedS);
+            Byte[] toHash = fromUInt32Array(S);
 
             Byte[] hash = genSHA512(toHash);
 
@@ -3941,6 +4108,7 @@ namespace HomeKit_Test
             
             for (int i=0; i < 5; i++)
             {
+                
                 setIdentifyBox(true);
                 Thread.Sleep(500);
                 setIdentifyBox(false);
@@ -3955,6 +4123,39 @@ namespace HomeKit_Test
             {
                 identifyBox.Checked = newVal;
             });
+        }
+
+        private void loopCountTimer_Tick(object sender, EventArgs e)
+        {
+            loopCountLabel.Text = loopCount.ToString();
+            for (int i = 0; i< sessions.Length; i++)
+            {
+                string itemString = i.ToString() + ": ";
+                if (sessions[i] is null) itemString += "null";
+                else if (!sessions[i].client.Client.Connected) itemString += "disconnected";
+                else
+                {
+                    itemString += sessions[i].client.Client.RemoteEndPoint.ToString();
+                    itemString += " Pairing: " + sessions[i].pairingID.ToString();
+                    itemString += " Events: " + (sessions[i].evOn ? "Y" : "N");
+                }
+                sessionListBox.Items[i] = itemString;
+            }
+            for (int i = 0; i < pairings.Length; i++)
+            {
+                string itemString = i.ToString() + ": ";
+                if (pairings[i].dataDevicePairingID is null) itemString += "null";
+                //else if (!sessions[i].client.Client.Connected) itemString += "disconnected";
+                else itemString += Encoding.UTF8.GetString(pairings[i].dataDevicePairingID);
+                pairingsListBox.Items[i] = itemString;
+            }
+
+        }
+
+        private void cycleDelayTrackBar_Scroll(object sender, EventArgs e)
+        {
+            cycleDelay = cycleDelayTrackBar.Value; 
+            cycleDelayLabel.Text = cycleDelay.ToString();
         }
     }
 }
