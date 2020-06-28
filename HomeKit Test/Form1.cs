@@ -2550,61 +2550,20 @@ namespace HomeKit_Test
 
         UInt32[] UInt32ArrayMod(UInt32[] aIn, UInt32[] modIn)
         {
+            int n = aIn.Length;
+            int32Array c;
+            c.digits = new uint[modIn.Length];
+            c.negative = false;
 
-            UInt32[] r;
-            UInt32ArrayShrink(ref aIn); //remove leading zeros
-            UInt32ArrayShrink(ref modIn);
+            int32Array a;
+            a.digits = aIn;
+            a.negative = false;
 
-            UInt32[] a = new UInt32[aIn.Length];
-            UInt32[] mod = new UInt32[modIn.Length];
+            int32Array mod;
+            mod.digits = modIn;
+            mod.negative = false;
 
-            int cmpResult;
 
-            if (a.Length < mod.Length || (cmpResult = UInt32ArrayCmpNoSign(a, mod)) == -1)  //if a less than mod return a
-            {
-                r = new UInt32[a.Length];
-                for (int i = 0; i < a.Length; i++) r[i] = a[i];
-                return r;
-            }
-            else if (cmpResult == 0) return new UInt32[1]; //if a equals mod return 0
-
-            int lenDif = a.Length - mod.Length;
-            UInt32[] q = new UInt32[lenDif + 1];
-
-            while (true)
-            {
-                bool less = false;
-                for (int i = mod.Length - 1; i >=0; i--) //check if x >= yb^(n-t)
-                {
-                    if (a[i + lenDif] < mod[i])
-                    {
-                        less = true;
-                        break;
-                    }
-                    if (a[i + lenDif] > mod[i])
-                    {
-                        break;
-                    }
-                }
-                if (!less)
-                {
-                    q[lenDif]++; //increment most significant digit of q
-                    UInt32[] temp = new uint[a.Length];
-                    for (int i = 0; i < mod.Length; i++) temp[i + lenDif] = mod[i]; // yb^(n-t)
-                    a = UInt32ArraySubSimple(a, temp); //x-yb^(n-t)
-                }
-                else break;
-            }
-
-            for (int i = a.Length - 1; i >= mod.Length; i--)
-            {
-                if (a[i] == mod[mod.Length - 1]) q[i - mod.Length - 2] = 0xffffffff;
-                else
-                {
-
-                }
-
-            }
 
             int cmpResult = int32ArrayCmp(a, mod);
             if (cmpResult == 0) return c.digits;
