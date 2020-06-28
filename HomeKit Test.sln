@@ -11,6 +11,8 @@ Project("{888888A0-9F3D-457C-B088-3A5042F75D52}") = "Ed25519", "Ed25519\Ed25519.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "chachaPolyTest", "chachaPolyTest\chachaPolyTest.csproj", "{EA362CD9-A070-4EC7-84FE-FF5C1B4A515F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tests", "Tests\Tests.csproj", "{0D94A542-9153-406A-B54D-935D7B6A5EA8}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -31,6 +33,10 @@ Global
 		{EA362CD9-A070-4EC7-84FE-FF5C1B4A515F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{EA362CD9-A070-4EC7-84FE-FF5C1B4A515F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{EA362CD9-A070-4EC7-84FE-FF5C1B4A515F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0D94A542-9153-406A-B54D-935D7B6A5EA8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0D94A542-9153-406A-B54D-935D7B6A5EA8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0D94A542-9153-406A-B54D-935D7B6A5EA8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0D94A542-9153-406A-B54D-935D7B6A5EA8}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

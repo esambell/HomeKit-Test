@@ -4,7 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
-namespace HomeKit_Test
+namespace Tests
 {
     static class Program
     {
@@ -16,7 +16,7 @@ namespace HomeKit_Test
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new HomeKit());
+            Application.Run(new Form1());
         }
     }
 }

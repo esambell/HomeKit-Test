@@ -1,6 +1,6 @@
 ﻿namespace HomeKit_Test
 {
-    partial class form1
+    partial class HomeKit
     {
         /// <summary>
         /// Required designer variable.
@@ -226,7 +226,7 @@
             this.pairingsListBox.Size = new System.Drawing.Size(796, 384);
             this.pairingsListBox.TabIndex = 15;
             // 
-            // form1
+            // HomeKit
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(9F, 20F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
@@ -247,8 +247,8 @@
             this.Controls.Add(this.textBox2);
             this.Controls.Add(this.textBox1);
             this.Controls.Add(this.label1);
-            this.Name = "form1";
-            this.Text = "Form1";
+            this.Name = "HomeKit";
+            this.Text = "HomeKit";
             this.Load += new System.EventHandler(this.Form1_Load);
             ((System.ComponentModel.ISupportInitialize)(this.cycleDelayTrackBar)).EndInit();
             this.ResumeLayout(false);

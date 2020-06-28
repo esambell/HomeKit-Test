@@ -42,7 +42,7 @@ using System.Net.Mime;
 
 namespace HomeKit_Test
 {
-    public partial class form1 : Form
+    public partial class HomeKit : Form
     {
 
         struct UInt64c
@@ -213,10 +213,17 @@ namespace HomeKit_Test
         Session[] sessions = new Session[8];
 
 
-        public form1()
+        public HomeKit()
         {
             InitializeComponent();
         }
+
+        public HomeKit(bool enable)
+        {
+            InitializeComponent();
+            loopCountTimer.Enabled = false;
+        }
+
 
         private void Form1_Load(object sender, EventArgs e)
         {
