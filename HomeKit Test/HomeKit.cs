@@ -42,7 +42,7 @@ using System.Net.Mime;
 
 namespace HomeKit_Test
 {
-    public partial class form1 : Form
+    public partial class HomeKit : Form
     {
 
         struct UInt64c
@@ -213,7 +213,7 @@ namespace HomeKit_Test
         Session[] sessions = new Session[8];
 
 
-        public form1()
+        public HomeKit()
         {
             InitializeComponent();
         }
@@ -697,7 +697,11 @@ namespace HomeKit_Test
                         {
 
                             if (curSession.client.Client.Poll(1, SelectMode.SelectRead) && curSession.client.Available == 0)
+
+                            {
+                                AddToLogBox("Close Detected " + curSession.client.Available.ToString() + " Bytes\r\n");
                                 closeSession(ref curSession);
+                            }
                         }
                     }
                   
