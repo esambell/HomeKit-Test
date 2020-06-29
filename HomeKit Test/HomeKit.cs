@@ -218,6 +218,12 @@ namespace HomeKit_Test
             InitializeComponent();
         }
 
+        public HomeKit(bool enable)
+        {
+            InitializeComponent();
+            loopCountTimer.Enabled = false;
+        }
+
         private void Form1_Load(object sender, EventArgs e)
         {
             cycleDelayTrackBar.Value = cycleDelay;
