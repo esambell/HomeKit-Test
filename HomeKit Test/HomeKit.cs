@@ -3,8 +3,8 @@
  * Minimal Apple Homekit emulator with minimal dependencies
  * (c) Eric Sambell 2020 MIT License
  * 
- * SHA-512 based on Crhis Veness Java Script SHA-512 implementation (https://www.movable-type.co.uk/scripts/sha512.html)
- * Big integare arithmatic based on answer from: https://stackoverflow.com/questions/2207006/modular-exponentiation-for-high-numbers-in-c by clinux
+ * SHA-512 based on Chris Veness Java Script SHA-512 implementation (https://www.movable-type.co.uk/scripts/sha512.html)
+ * Big integer arithmatic based on answer from: https://stackoverflow.com/questions/2207006/modular-exponentiation-for-high-numbers-in-c by clinux
  * Modular inverse calculation from https://www.di-mgt.com.au/euclidean.html#code-modinv implementation of KNU298 avoiding negative integers
  * Chacha20 from https://github.com/sbennett1990/ChaCha20-csharp
  * ed25519 primarily from RFC 8032, https://github.com/hanswolff/ed25519 used for guidance
@@ -3027,7 +3027,7 @@ namespace HomeKit_Test
                 if (UInt32ArrayCmpNoSign(curRemainder, curDenominator) >= 0)
                 {
                     curRemainder = UInt32ArraySubSimple(curRemainder, curDenominator);
-                    q[i / 32] |= (UInt32)0x1 << (i - i / 32); 
+                    q[i / 32] |= (UInt32)0x1 << (i % 32); 
                 }
             }
 
