@@ -704,7 +704,11 @@ namespace HomeKit_Test
                         {
 
                             if (curSession.client.Client.Poll(1, SelectMode.SelectRead) && curSession.client.Available == 0)
+                            {
+                                AddToLogBox("Close Detected " + curSession.client.Available.ToString() + " Bytes Available\r\n");
                                 closeSession(ref curSession);
+                            }
+                                
                         }
                     }
                   
