@@ -16,7 +16,7 @@ namespace HomeKit_Test
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new HomeKit());
+            Application.Run(new form1());
         }
     }
 }
