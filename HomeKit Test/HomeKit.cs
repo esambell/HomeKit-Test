@@ -2557,11 +2557,67 @@ namespace HomeKit_Test
 
         UInt32[] UInt32ArrayMod(UInt32[] aIn, UInt32[] modIn)
         {
-            UInt32ArrayDiv(aIn, modIn, out _, out uint[] r);
+            int n = aIn.Length;
+            int32Array c;
+            c.digits = new uint[modIn.Length];
+            c.negative = false;
 
-            return r;
+            int32Array a;
+            a.digits = aIn;
+            a.negative = false;
+
+            int32Array mod;
+            mod.digits = modIn;
+            mod.negative = false;
 
 
+
+            int cmpResult = int32ArrayCmp(a, mod);
+            if (cmpResult == 0) return c.digits;
+            if (cmpResult == -1)
+            {
+                for (int i = 0; i < c.digits.Length && i < a.digits.Length; i++)
+                {
+                    c.digits[i] = a.digits[i];
+                }
+                return c.digits;
+            }
+
+            int32Array curDenominator;
+            curDenominator.digits = new UInt32[n * 2];
+            curDenominator.negative = false;
+            for (int i = 0; i < n; i++)
+            {
+                if (i < mod.digits.Length)
+                {
+                    curDenominator.digits[i + n] = mod.digits[i];
+                }
+
+            }
+            int32Array curRemainder;
+            curRemainder.digits = new UInt32[n * 2];
+            curRemainder.negative = false;
+            for (int i = 0; i < n; i++)
+            {
+                curRemainder.digits[i] = a.digits[i];
+            }
+
+            for (int i = (n * 32) - 1; i >= 0; i--)
+            {
+                curRemainder = int32ArraySHL(curRemainder);
+                if (int32ArrayCmp(curRemainder, curDenominator) >= 0)
+                {
+                    curRemainder.digits = UInt32ArraySubSimple(curRemainder.digits, curDenominator.digits);
+                }
+            }
+
+            for (int i = 0; i < mod.digits.Length; i++)
+            {
+                c.digits[i] = curRemainder.digits[i + n];
+            }
+
+
+            return c.digits;
 
         }
 
@@ -2975,7 +3031,7 @@ namespace HomeKit_Test
 
         }
 
-        public void UInt32ArrayDiv(UInt32[] A, UInt32[] B, out UInt32[] q, out UInt32[] r)
+        void UInt32ArrayDiv(UInt32[] A, UInt32[] B, out UInt32[] q, out UInt32[] r)
         {
             int n = A.Length;
             UInt32[] c;
@@ -2991,7 +3047,6 @@ namespace HomeKit_Test
             {
                 q = new UInt32[] { 1 };
                 r = new uint[] { 0 };
-                return;
             }
             if (cmpResult == -1)
             {
@@ -3031,18 +3086,13 @@ namespace HomeKit_Test
                 }
             }
 
-            int rEnd = curRemainder.Length - 1;
-            for (; rEnd >= n; rEnd--) if (curRemainder[rEnd] != 0) break;
             
+            r = new UInt32[B.Length];
 
-            r = new UInt32[rEnd + 1 - n];
-
-            for (int i = 0; i < r.Length; i++)
+            for (int i = 0; i < B.Length; i++)
             {
                 r[i] = curRemainder[i + n];
             }
-
-            UInt32ArrayShrink(ref q);
 
             return;
         }
