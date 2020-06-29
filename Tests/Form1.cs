@@ -17,12 +17,12 @@ namespace Tests
         {
             InitializeComponent();
         }
-        
+
         private void Form1_Load(object sender, EventArgs e)
         {
             HomeKit temp = new HomeKit(false);
 
-            UInt32[] A = new UInt32[] { 0xffffffff, 0xffff };
+            UInt32[] A = new UInt32[] { 0xffffffff, 0xffffffff};
             UInt32[] B = new UInt32[] { 0x100 };
             UInt32[] q, r;
             temp.UInt32ArrayDiv(A, B, out q, out r);
