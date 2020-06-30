@@ -207,6 +207,7 @@ namespace HomeKit_Test
             public bool evOn;
             public bool evInUse;
             public int pairingID;
+            public string state;
 
         }
 
@@ -537,6 +538,7 @@ namespace HomeKit_Test
                         curSession.dataBytes = new Byte[0xffff];
                         curSession.stream = curSession.client.GetStream();
                         curSession.pairingID = -1;
+                        curSession.state = "C";
                     }
 
                 }
@@ -636,7 +638,7 @@ namespace HomeKit_Test
                                     if (curSession.encDataReceived == curSession.encDataExpected + 2 + 16)
                                     {
                                         Byte[] msg;
-
+                                        curSession.state = "DECODE";
                                         if (AEADDecrypt(curSession.dataBytes, curSession.controlToAccKey, curSession.controlToAccNonce, curSession.encDataReceived, out msg))
                                         {
                                             AddToLogBox(Encoding.UTF8.GetString(msg) + "\r\n");
@@ -675,7 +677,7 @@ namespace HomeKit_Test
                                             {
                                                 curSession.dataBytes[j - contentStart] = msg[j];
                                             }
-
+                                            curSession.state = "";
                                             processHTTP(ref curSession);
                                             curSession.encDataReceived = 0;
 
@@ -996,6 +998,7 @@ namespace HomeKit_Test
                                     {
                                         case 0x01:
                                             {
+                                                curSession.state = "V1-Keys";
                                                 curSession.devicePublicKey = findTLVKey(curSession.dataBytes, 0x03, curSession.dataBytesReceived);
                                                 Byte[] accessoryPrivateKey = byteGenRandom(32);
                                                 curSession.accessoryPublicKey = c25519Public(accessoryPrivateKey);
@@ -1006,6 +1009,7 @@ namespace HomeKit_Test
                                                 accessoryInfo = accessoryInfo.Concat(pairingID).ToArray();
                                                 accessoryInfo = accessoryInfo.Concat(curSession.devicePublicKey).ToArray();
 
+                                                curSession.state = "V1-Sign";
                                                 Byte[] signature = ed25519sign(dataAccessoryLTSK, accessoryInfo);
 
                                                 Byte[] subTLV = new Byte[0];
@@ -1013,7 +1017,7 @@ namespace HomeKit_Test
                                                 appendTLVBytes(ref subTLV, 0x0a, signature);
 
                                                 curSession.sessionKey = genHKDFSHA512(curSession.sharedKey, "Pair-Verify-Encrypt-Salt", "Pair-Verify-Encrypt-Info", 32);
-
+                                                curSession.state = "V1-Encode";
                                                 Byte[] nonce = Encoding.UTF8.GetBytes("PV-Msg02");
                                                 Byte[] encData = chacha20(curSession.sessionKey, nonce, subTLV, 1);
                                                 Byte[] authTag = genAuthTag(encData, curSession.sessionKey, nonce);
@@ -1025,12 +1029,13 @@ namespace HomeKit_Test
                                                 appendTLVBytes(ref response, 0x05, respData);
 
                                                 sendTLVResponse(curSession, response);
-
+                                                curSession.state = "V1-Sent";
                                                 break;
                                             }
 
                                         case 0x03:
                                             {
+                                                curSession.state = "V3";
                                                 Byte[] encData = findTLVKey(curSession.dataBytes, 0x05, curSession.dataBytesReceived);
                                                 Byte[] nonce = Encoding.UTF8.GetBytes("PV-Msg03");
                                                 Byte[] subTLV = new byte[encData.Length - 16];
@@ -1038,7 +1043,7 @@ namespace HomeKit_Test
 
                                                 for (int i = 0; i < subTLV.Length; i++) subTLV[i] = encData[i];
                                                 for (int i = 0; i < 16; i++) authTag[i] = encData[encData.Length - 16 + i];
-
+                                                curSession.state = "V3-Verify";
                                                 if (verifyAuthTag(subTLV, authTag, curSession.sessionKey, nonce)) AddToLogBox("M3 Verify decrypt successful\r\n");
                                                 else
                                                 {
@@ -1046,7 +1051,7 @@ namespace HomeKit_Test
                                                     AddToLogBox("Verify M3 Auth Tag Fail\r\n");
                                                     break;
                                                 }
-
+                                                curSession.state = "V3-Decode";
                                                 subTLV = chacha20(curSession.sessionKey, nonce, subTLV, 1);
 
                                                 Byte[] receivedPairingID = findTLVKey(subTLV, 0x01, subTLV.Length);
@@ -1069,7 +1074,7 @@ namespace HomeKit_Test
                                                 Byte[] deviceInfo = curSession.devicePublicKey;
                                                 deviceInfo = deviceInfo.Concat(receivedPairingID).ToArray();
                                                 deviceInfo = deviceInfo.Concat(curSession.accessoryPublicKey).ToArray();
-
+                                                curSession.state = "V3-SignCheck";
                                                 bool result = ed25519verify(pairings[pairingID].dataDeviceLTPK, deviceInfo, receivedSignature);
                                                 AddToLogBox("Verify M3 signature status: " + result);
                                                 if (!result)
@@ -1083,13 +1088,13 @@ namespace HomeKit_Test
                                                 appendTLVBytes(ref response, 0x06, new Byte[] { 0x04 });
 
                                                 sendTLVResponse(curSession, response);
-
+                                                curSession.state = "V3-Keys";
                                                 curSession.accToControlKey = genHKDFSHA512(curSession.sharedKey, "Control-Salt", "Control-Read-Encryption-Key", 32);
                                                 curSession.controlToAccKey = genHKDFSHA512(curSession.sharedKey, "Control-Salt", "Control-Write-Encryption-Key", 32);
                                                 curSession.encryptedSession = true;
                                                 curSession.accToControlNonce = UInt64cAssign(0);
                                                 curSession.controlToAccNonce = UInt64cAssign(0);
-
+                                                curSession.state = "V3-Success";
                                                 break;
                                             }
                                     }
@@ -4099,6 +4104,7 @@ namespace HomeKit_Test
                     itemString += sessions[i].client.Client.RemoteEndPoint.ToString();
                     itemString += " Pairing: " + sessions[i].pairingID.ToString();
                     itemString += " Events: " + (sessions[i].evOn ? "Y" : "N");
+                    itemString += " State: " + sessions[i].state;
                 }
                 sessionListBox.Items[i] = itemString;
             }
