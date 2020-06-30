@@ -3743,12 +3743,14 @@ namespace HomeKit_Test
             int32Array B = int32ArrayMulMod(int32ArrayAdd(P.Y, P.X), int32ArrayAdd(Q.Y, Q.X), ed25519p);
             
             int32Array C = int32ArrayMul(int32ArrayMul(P.T, Q.T), d);
-            C.digits = UInt32ArraySHL(C.digits);
             C = int32ArrayMod(C, ed25519p);
+            C.digits = UInt32ArraySHL(C.digits);
+            
             
             int32Array D = int32ArrayMul(P.Z, Q.Z);
-            D.digits = UInt32ArraySHL(D.digits);
             D = int32ArrayMod(D, ed25519p);
+            D.digits = UInt32ArraySHL(D.digits);
+            
 
             int32Array E = int32ArraySub(B, A);
             int32Array F = int32ArraySub(D, C);
@@ -3758,10 +3760,10 @@ namespace HomeKit_Test
             
 
             pointExtUInt32 returnVal;
-            returnVal.X = int32ArrayMul(E, F);
-            returnVal.Y = int32ArrayMul(G, H);
-            returnVal.Z = int32ArrayMul(F, G);
-            returnVal.T = int32ArrayMul(E, H);
+            returnVal.X = int32ArrayMulMod(E, F, ed25519p);
+            returnVal.Y = int32ArrayMulMod(G, H, ed25519p);
+            returnVal.Z = int32ArrayMulMod(F, G, ed25519p);
+            returnVal.T = int32ArrayMulMod(E, H, ed25519p);
 
             return returnVal;
         }
