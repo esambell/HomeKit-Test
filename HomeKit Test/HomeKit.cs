@@ -4097,27 +4097,35 @@ namespace HomeKit_Test
                 cswap(swap, ref z_2.digits, ref z_3.digits);
                 swap = k_t;
 
-                int32Array A = int32ArrayAdd(x_2, z_2);
-                int32Array AA = int32ArrayMulMod(A, A, ed25519p);
-                int32Array B = int32ArraySub(x_2, z_2);
-                int32Array BB = int32ArrayMulMod(B, B, ed25519p);
-                int32Array E = int32ArraySub(AA, BB);
-                int32Array C = int32ArrayAdd(x_3, z_3);
-                int32Array D = int32ArraySub(x_3, z_3);
-                int32Array DA = int32ArrayMulMod(D, A, ed25519p);
-                int32Array CB = int32ArrayMulMod(C, B, ed25519p);
-                int32Array DApCB = int32ArrayAdd(DA, CB);
-                int32Array DAmCB = int32ArraySub(DA, CB);
-                x_3 = int32ArrayMulMod(DApCB, DApCB, ed25519p);
-                z_3 = int32ArrayMulMod(x_1, int32ArrayMulMod(DAmCB, DAmCB, ed25519p), ed25519p);
-                x_2 = int32ArrayMulMod(AA, BB, ed25519p);
-                z_2 = int32ArrayMulMod(E, int32ArrayAdd(int32ArrayMul(X25519a24, E), AA), ed25519p);
+                int32Array A = int32ArrayQuickMod(int32ArrayAdd(x_2, z_2), ed25519p);
+                int32Array AA = int32ArrayModBarrett(int32ArrayMul(A, A), ed25519p, ed25519mu);
+                int32Array B = int32ArrayQuickMod(int32ArraySub(x_2, z_2), ed25519p);
+                int32Array BB = int32ArrayModBarrett(int32ArrayMul(B, B), ed25519p, ed25519mu);
+                int32Array E = int32ArrayQuickMod(int32ArraySub(AA, BB), ed25519p);
+                int32Array C = int32ArrayQuickMod(int32ArrayAdd(x_3, z_3), ed25519p);
+                int32Array D = int32ArrayQuickMod(int32ArraySub(x_3, z_3), ed25519p);
+                int32Array DA = int32ArrayModBarrett(int32ArrayMul(D, A), ed25519p, ed25519mu);
+                int32Array CB = int32ArrayModBarrett(int32ArrayMul(C, B), ed25519p, ed25519mu);
+                int32Array DApCB = int32ArrayQuickMod(int32ArrayAdd(DA, CB), ed25519p);
+                int32Array DAmCB = int32ArrayQuickMod(int32ArraySub(DA, CB), ed25519p);
+                x_3 = int32ArrayModBarrett(int32ArrayMul(DApCB, DApCB), ed25519p, ed25519mu);
+                z_3 = int32ArrayModBarrett(int32ArrayMul(DAmCB, DAmCB), ed25519p, ed25519mu);
+                z_3 = int32ArrayModBarrett(int32ArrayMul(x_1, z_3), ed25519p, ed25519mu);
+                x_2 = int32ArrayModBarrett(int32ArrayMul(AA, BB), ed25519p, ed25519mu);
+                z_2 = int32ArrayModBarrett(int32ArrayMul(X25519a24, E), ed25519p, ed25519mu);
+                z_2 = int32ArrayQuickMod(int32ArrayAdd(z_2, AA), ed25519p);
+                z_2 = int32ArrayModBarrett(int32ArrayMul(E, z_2), ed25519p, ed25519mu);
             }
 
             cswap(swap, ref x_2.digits, ref x_3.digits);
             cswap(swap, ref z_2.digits, ref z_3.digits);
 
-            UInt32[] result = UInt32ArrayMulMod(x_2.digits, UInt32PowModMonty(z_2.digits, UInt32ArraySubSimple(ed25519p, new UInt32[] { 0x02 }), ed25519p), ed25519p);
+            int32Array resultTemp;
+            resultTemp.digits = UInt32PowModMonty(z_2.digits, UInt32ArraySubSimple(ed25519p, new UInt32[] { 0x02 }), ed25519p);
+            resultTemp.negative = false;
+            resultTemp = int32ArrayModBarrett(int32ArrayMul(x_2, resultTemp), ed25519p, ed25519mu);
+
+            UInt32[] result = resultTemp.digits;
             result[7] &= 0x7FFFFFFF;
 
             return fromUInt32ArrayLE(result);
