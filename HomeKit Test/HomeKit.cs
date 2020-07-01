@@ -3510,6 +3510,7 @@ namespace HomeKit_Test
         pointUInt32 ed25519B;
         pointExtUInt32 ed25519G;
         UInt32[] ed25519p;
+        UInt32[] ed25519mu;
 
         int32Array X25519a24;
         
@@ -3523,6 +3524,9 @@ namespace HomeKit_Test
             ed25519d = UInt32ArrayReverse(ed25519d);
             ed25519i = UInt32ArrayReverse(ed25519i);
             ed25519L = UInt32ArrayReverse(ed25519L);
+            UInt32ArrayDiv(new UInt32[] {   0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
+                                            0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x1 }, ed25519p, out ed25519mu, out _);
+            
 
             ed25519G.X.negative = false; ed25519G.Y.negative = false; ed25519G.Z.negative = false; ed25519G.T.negative = false; 
 
@@ -3742,37 +3746,133 @@ namespace HomeKit_Test
 
         }
 
+        //quickly reduces by mod if a known to be within 1 * mod, such as when 2 numbers already reduced by mod are added or subtracted
+        //no error checking to minimize cycles
+        int32Array int32ArrayQuickMod(int32Array a, UInt32[] modIn) 
+        {
+            int32Array mod;
+            mod.digits = modIn;
+            mod.negative = false;
+
+            if (a.negative) a = int32ArrayAdd(a, mod); //if negative add mod to make positive
+            else if (int32ArrayCmpNoSign(a, mod) == 1) a = int32ArraySub(a, mod); //if a is greater than mod substract mod to reduce below mod
+            UInt32ArrayShrink(ref a.digits);
+            return a;
+        }
+
+        int32Array int32ArrayModBarrett(int32Array xIn, UInt32[] mod, UInt32[] mu)
+        {
+            
+            int k = mod.Length;
+
+            if (xIn.digits.Length > 2 * k) throw new InvalidOperationException("x too big");
+            UInt32[] x;
+            if (xIn.digits.Length < 2 * k)
+            {
+                x = new UInt32[2 * k];
+                for (int i = 0; i < xIn.digits.Length; i++) x[i] = xIn.digits[i];
+            } else x = xIn.digits;
+            UInt32[] q1 = UInt32ArraySHRWordsCopy(x, k-1);
+            UInt32[] q2 = UInt32ArrayMulNoSign(q1, mu);
+            UInt32[] q3 = UInt32ArraySHRWordsCopy(q2, k + 1);
+
+            UInt32[] r1 = UInt32ArrayModB(x, k + 1);
+            UInt32[] r2 = UInt32ArrayModB(UInt32ArrayMulNoSign(q3, mod), k + 1);
+            int32Array r = int32ArraySub(r1, r2);
+
+            if (r.negative) r = int32ArrayAdd(r, int32Array_bton(k + 1));
+            while (UInt32ArrayCmpNoSign(r.digits, mod) >= 0) r.digits = UInt32ArraySubSimple(r.digits, mod);
+
+            if (UInt32ArrayIsZero(r.digits))
+            {
+                r.negative = false;
+            }
+            if (r.negative == true)
+            {
+                r.digits = UInt32ArraySubSimple(mod, r.digits);
+                r.negative = false;
+            }
+
+            UInt32ArrayShrink(ref r.digits);
+            return r;
+
+        }
+
+        
+        //generates an array with b^n
+        int32Array int32Array_bton(int n)
+        {
+            int32Array returnVal;
+            returnVal.digits = UInt32Array_bton(n);
+            returnVal.negative = false;
+            return returnVal;
+        }
+
+        UInt32[] UInt32Array_bton (int n)
+        {
+            UInt32[] returnVal = new UInt32[n + 1];
+            returnVal[n] = 0x01;
+            return returnVal;
+        }
+
+        UInt32[] UInt32ArraySHRWordsCopy(UInt32[] x, int n)
+        {
+
+            if (n >= x.Length) return new UInt32[] { 0x0 };
+            UInt32[] returnVal = new UInt32[x.Length - n];
+            for (int i = 0; i < (x.Length - n); i++) returnVal[i] = x[i + n];
+            return returnVal;
+        }
+
+        UInt32[] UInt32ArrayModB(UInt32[] x, int n)
+        {
+
+            if (n >= x.Length) return x;
+            UInt32[] returnVal = new UInt32[n];
+            for (int i = 0; i < n; i++) returnVal[i] = x[i];
+            return returnVal;
+        }
+
         pointExtUInt32 ed25519pointAdd(pointExtUInt32 P, pointExtUInt32 Q)
         {
             int32Array d;
             d.digits = ed25519d;
             d.negative = false;
             
-            int32Array A = int32ArrayMulMod(int32ArraySub(P.Y, P.X), int32ArraySub(Q.Y, Q.X), ed25519p);
-            int32Array B = int32ArrayMulMod(int32ArrayAdd(P.Y, P.X), int32ArrayAdd(Q.Y, Q.X), ed25519p);
-            
-            int32Array C = int32ArrayMul(int32ArrayMul(P.T, Q.T), d);
-            C = int32ArrayMod(C, ed25519p);
+            int32Array A = int32ArrayMul(int32ArrayQuickMod(int32ArraySub(P.Y, P.X), ed25519p), int32ArrayQuickMod(int32ArraySub(Q.Y, Q.X), ed25519p));
+            int32Array B = int32ArrayMul(int32ArrayQuickMod(int32ArrayAdd(P.Y, P.X), ed25519p), int32ArrayQuickMod(int32ArrayAdd(Q.Y, Q.X), ed25519p));
+
+
+            A = int32ArrayModBarrett(A, ed25519p, ed25519mu);
+            B = int32ArrayModBarrett(B, ed25519p, ed25519mu);
+
+
+            int32Array C = int32ArrayMul(P.T, Q.T);
+            C = int32ArrayModBarrett(C, ed25519p, ed25519mu);
+            C = int32ArrayMul(C, d);
+            C = int32ArrayModBarrett(C, ed25519p, ed25519mu);
             C.digits = UInt32ArraySHL(C.digits);
+            C = int32ArrayQuickMod(C, ed25519p);
             
             
             int32Array D = int32ArrayMul(P.Z, Q.Z);
-            D = int32ArrayMod(D, ed25519p);
+            D = int32ArrayModBarrett(D, ed25519p, ed25519mu);
             D.digits = UInt32ArraySHL(D.digits);
-            
+            D = int32ArrayQuickMod(D, ed25519p);
 
-            int32Array E = int32ArraySub(B, A);
-            int32Array F = int32ArraySub(D, C);
-            int32Array G = int32ArrayAdd(D, C);
-            int32Array H = int32ArrayAdd(B, A);
 
-            
+            int32Array E = int32ArrayQuickMod(int32ArraySub(B, A), ed25519p);
+            int32Array F = int32ArrayQuickMod(int32ArraySub(D, C), ed25519p);
+            int32Array G = int32ArrayQuickMod(int32ArrayAdd(D, C), ed25519p);
+            int32Array H = int32ArrayQuickMod(int32ArrayAdd(B, A), ed25519p);
+
+
 
             pointExtUInt32 returnVal;
-            returnVal.X = int32ArrayMulMod(E, F, ed25519p);
-            returnVal.Y = int32ArrayMulMod(G, H, ed25519p);
-            returnVal.Z = int32ArrayMulMod(F, G, ed25519p);
-            returnVal.T = int32ArrayMulMod(E, H, ed25519p);
+            returnVal.X = int32ArrayModBarrett(int32ArrayMul(E, F), ed25519p, ed25519mu);
+            returnVal.Y = int32ArrayModBarrett(int32ArrayMul(G, H), ed25519p, ed25519mu);
+            returnVal.Z = int32ArrayModBarrett(int32ArrayMul(F, G), ed25519p, ed25519mu);
+            returnVal.T = int32ArrayModBarrett(int32ArrayMul(E, H), ed25519p, ed25519mu);
 
             return returnVal;
         }
