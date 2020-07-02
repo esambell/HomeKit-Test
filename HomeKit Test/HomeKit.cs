@@ -818,7 +818,7 @@ namespace HomeKit_Test
                                                 else
                                                 {
 
-
+                                                    curSession.state = "S1-Keys";
                                                     pairSetupContext.s = byteGenRandom(16);
 
                                                     UInt32[] storedx = generatePrivateKey(toUInt32Array(pairSetupContext.s), userName, DeviceCode);
@@ -835,13 +835,15 @@ namespace HomeKit_Test
                                                     appendTLVBytes(ref TLVResponse, 0x03, fromUInt32Array(pairSetupContext.B));
 
                                                     sendTLVResponse(curSession, TLVResponse);
-
+                                                    curSession.state = "S1-Complete";
                                                 }
 
                                                 break;
                                             }
                                         case 3:
                                             {
+
+                                                curSession.state = "S3";
                                                 Byte[] publicA = findTLVKey(curSession.dataBytes, 0x03, curSession.dataBytesReceived);
                                                 Byte[] proofA = findTLVKey(curSession.dataBytes, 0x04, curSession.dataBytesReceived);
 
@@ -898,12 +900,13 @@ namespace HomeKit_Test
                                                 sendTLVResponse(curSession, TLVResponse);
 
                                                 AddToLogBox("Server Proof Sent\r\n");
-
+                                                curSession.state = "S3-Complete";
                                                 break;
 
                                             }
                                         case 5:
                                             {
+                                                curSession.state = "S5-Verify";
                                                 Byte[] encData = findTLVKey(curSession.dataBytes, 0x05, curSession.dataBytesReceived);
                                                 Byte[] chachaKey = genHKDFSHA512(fromUInt32Array(pairSetupContext.K), "Pair-Setup-Encrypt-Salt", "Pair-Setup-Encrypt-Info", 32);
                                                 Byte[] nonce = Encoding.UTF8.GetBytes("PS-Msg05");
@@ -938,7 +941,7 @@ namespace HomeKit_Test
                                                 bool result = ed25519verify(pairings[0].dataDeviceLTPK, deviceInfo, deviceSignature);
                                                 AddToLogBox(result.ToString() + "\r\n");
 
-                                              
+                                                curSession.state = "S5-Response";
 
                                                 Byte[] pairingID = getAccessoryPairingIDBytes(dataPairingID);
 
@@ -975,6 +978,7 @@ namespace HomeKit_Test
 
                                                 updateBonjourFlag("sf","0");
                                                 sd.Announce(za);
+                                                curSession.state = "S5-Pairing Complete";
 
                                                 break;
                                             }
@@ -4211,6 +4215,8 @@ namespace HomeKit_Test
                     itemString += " Pairing: " + sessions[i].pairingID.ToString();
                     itemString += " Events: " + (sessions[i].evOn ? "Y" : "N");
                     itemString += " State: " + sessions[i].state;
+                    itemString += " Data: " + sessions[i].dataBytesReceived.ToString();
+                    itemString += " Encoded: " + sessions[i].encDataReceived.ToString();
                 }
                 sessionListBox.Items[i] = itemString;
             }
