@@ -99,17 +99,7 @@ namespace HomeKit_Test
                         0x08E24FA0, 0x74E5AB31, 0x43DB5BFC, 0xE0FD108E, 0x4B82D120, 0xA93AD2CA, 0xFFFFFFFF, 0xFFFFFFFF
         };
 
-        UInt32[] s = { 0xBEB25379, 0xD1A8581E, 0xB5A72767, 0x3A2441EE };
-
-        UInt32[] a = {  0x60975527, 0x035CF2AD, 0x1989806F, 0x0407210B,
-                        0xC81EDC04, 0xE2762A56, 0xAFD529DD, 0xDA2D4393
-        };
-
-        UInt32[] b = {  0xE487CB59, 0xD31AC550, 0x471E81F0, 0x0F6928E0,
-                        0x1DDA08E9, 0x74A004F4, 0x9E61F5D1, 0x05284D20
-        };
-
-        struct PairSetupContext
+         struct PairSetupContext
         {
             public UInt32[] k;
             public UInt32[] B;
@@ -221,9 +211,6 @@ namespace HomeKit_Test
             K = initHexArray(k);
             HInitial = initHexArray(h);
             N = UInt32ArrayReverse(N);
-            a = UInt32ArrayReverse(a);
-            b = UInt32ArrayReverse(b);
-            s = UInt32ArrayReverse(s);
             init_ed25519();
             accessoryLTPK = ed25519PublicKey(dataAccessoryLTSK);
 
@@ -2782,12 +2769,7 @@ namespace HomeKit_Test
 
         private void MontyTest_DoWork(object sender, DoWorkEventArgs e)
         {
-            UInt32[] testResult = UInt32PowModMonty(g, a, N);
-
-            foreach (UInt32 i in testResult)
-            {
-                AddToLogBox(i.ToString("X8") + "\r\n");
-            }
+       
         }
 
         Byte[] genHKDFSHA512(Byte[] IKM, Byte[] salt, Byte[] info, int L)
