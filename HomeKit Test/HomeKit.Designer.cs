@@ -161,12 +161,15 @@
             // identifyBox
             // 
             this.identifyBox.AutoSize = true;
-            this.identifyBox.Location = new System.Drawing.Point(346, 676);
+            this.identifyBox.CheckAlign = System.Drawing.ContentAlignment.TopCenter;
+            this.identifyBox.Font = new System.Drawing.Font("Microsoft Sans Serif", 16F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.identifyBox.Location = new System.Drawing.Point(259, 670);
             this.identifyBox.Name = "identifyBox";
-            this.identifyBox.Size = new System.Drawing.Size(87, 24);
+            this.identifyBox.Size = new System.Drawing.Size(206, 62);
             this.identifyBox.TabIndex = 10;
-            this.identifyBox.Text = "Identify";
+            this.identifyBox.Text = "Outlet Status";
             this.identifyBox.UseVisualStyleBackColor = true;
+            this.identifyBox.CheckedChanged += new System.EventHandler(this.identifyBox_CheckedChanged);
             // 
             // Identify
             // 

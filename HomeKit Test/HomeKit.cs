@@ -3800,6 +3800,11 @@ namespace HomeKit_Test
             cycleDelay = cycleDelayTrackBar.Value; 
             cycleDelayLabel.Text = cycleDelay.ToString();
         }
+
+        private void identifyBox_CheckedChanged(object sender, EventArgs e)
+        {
+
+        }
     }
 }
 
