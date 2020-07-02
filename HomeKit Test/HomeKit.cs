@@ -507,6 +507,8 @@ namespace HomeKit_Test
 
                     //}
 
+                    duplicateClientCheck(client);
+
                     int curSessionId;
 
                     if ((curSessionId = findEmptySession()) == -1)
@@ -723,7 +725,20 @@ namespace HomeKit_Test
 
 
         }
-        
+
+        private void duplicateClientCheck(TcpClient client)
+        {
+            for (int i=0; i< sessions.Length; i++)
+            {
+                if (sessionActive(sessions[i]) && (((IPEndPoint)client.Client.RemoteEndPoint).Address.Equals(((IPEndPoint)sessions[i].client.Client.RemoteEndPoint).Address)))
+                {
+                    AddToLogBox("Closing duplicate session: " + i.ToString() + " IP: " + ((IPEndPoint)sessions[i].client.Client.RemoteEndPoint).Address.ToString());
+                    closeSession(ref sessions[i]);
+
+                }
+            }
+        }
+
         void sendStateEvent()
         {
             for (int i = 0; i< sessions.Length; i++)
@@ -4218,9 +4233,11 @@ namespace HomeKit_Test
                     itemString += sessions[i].client.Client.RemoteEndPoint.ToString();
                     itemString += " Pairing: " + sessions[i].pairingID.ToString();
                     itemString += " Events: " + (sessions[i].evOn ? "Y" : "N");
-                    itemString += " State: " + sessions[i].state;
+                    itemString += " State: " + sessions[i].state;                    
                     itemString += " Data: " + sessions[i].dataBytesReceived.ToString();
                     itemString += " Encoded: " + sessions[i].encDataReceived.ToString();
+                    itemString += " DevToAcc#: " + sessions[i].controlToAccNonce.lo.ToString();
+                    itemString += " AccToDev#: " + sessions[i].accToControlNonce.lo.ToString();
                 }
                 sessionListBox.Items[i] = itemString;
             }
