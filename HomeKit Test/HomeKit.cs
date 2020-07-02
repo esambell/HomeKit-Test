@@ -2584,15 +2584,10 @@ namespace HomeKit_Test
         public void UInt32ArrayDiv(UInt32[] A, UInt32[] B, out UInt32[] q, out UInt32[] r)
         {
             int n = A.Length;
-            UInt32[] c;
-            c = new uint[B.Length];
+                        
+          
 
-
-            UInt32[] a = new UInt32[A.Length];
-            A.CopyTo(a, 0);
-
-
-            int cmpResult = UInt32ArrayCmpNoSign(a, B);
+            int cmpResult = UInt32ArrayCmpNoSign(A, B);
             if (cmpResult == 0)
             {
                 q = new UInt32[] { 1 };
@@ -2602,15 +2597,18 @@ namespace HomeKit_Test
             if (cmpResult == -1)
             {
                 q = new UInt32[] { 0 };
-                r = new UInt32[B.Length];
+                r = new UInt32[A.Length];
 
-                for (int i = 0; i < r.Length && i < a.Length; i++)
+                for (int i = 0; i < r.Length && i < A.Length; i++)
                 {
-                    r[i] = a[i];
+                    r[i] = A[i];
                 }
+                UInt32ArrayShrink(ref r);
                 return;
             }
 
+            UInt32[] a = new UInt32[A.Length];
+            A.CopyTo(a, 0);
             UInt32[] curDenominator = new UInt32[n * 2];
 
             for (int i = 0; i < n; i++)
@@ -2649,6 +2647,7 @@ namespace HomeKit_Test
             }
 
             UInt32ArrayShrink(ref q);
+            UInt32ArrayShrink(ref r);
 
             return;
         }
