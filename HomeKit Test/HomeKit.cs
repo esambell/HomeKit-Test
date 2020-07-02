@@ -1,6 +1,7 @@
 ﻿
 /*
- * Minimal Apple Homekit emulator with minimal dependencies
+ * Minimal Apple Homekit emulator with minimal dependencies using
+ * Uses only 32-bit operations to allow for micro-controller adaptation
  * (c) Eric Sambell 2020 MIT License
  * 
  * SHA-512 based on Chris Veness Java Script SHA-512 implementation (https://www.movable-type.co.uk/scripts/sha512.html)
@@ -56,7 +57,7 @@ namespace HomeKit_Test
             public Boolean negative;
         }
 
-        String[] k =
+        readonly String[] k =
             { "428a2f98d728ae22", "7137449123ef65cd", "b5c0fbcfec4d3b2f", "e9b5dba58189dbbc",
             "3956c25bf348b538", "59f111f1b605d019", "923f82a4af194f9b", "ab1c5ed5da6d8118",
             "d807aa98a3030242", "12835b0145706fbe", "243185be4ee4b28c", "550c7dc3d5ffb4e2",
@@ -79,8 +80,7 @@ namespace HomeKit_Test
             "4cc5d4becb3e42b6", "597f299cfc657e2a", "5fcb6fab3ad6faec", "6c44198c4a475817"};
         UInt64c[] K = new UInt64c[80];
 
-
-        String[] h =
+        readonly String[] h =
             {  "6a09e667f3bcc908", "bb67ae8584caa73b", "3c6ef372fe94f82b", "a54ff53a5f1d36f1",
             "510e527fade682d1", "9b05688c2b3e6c1f", "1f83d9abfb41bd6b", "5be0cd19137e2179"};
         UInt64c[] HInitial = new UInt64c[80];
@@ -106,20 +106,17 @@ namespace HomeKit_Test
         };
 
         UInt32[] b = {  0xE487CB59, 0xD31AC550, 0x471E81F0, 0x0F6928E0,
-            0x1DDA08E9, 0x74A004F4, 0x9E61F5D1, 0x05284D20
+                        0x1DDA08E9, 0x74A004F4, 0x9E61F5D1, 0x05284D20
         };
 
         struct PairSetupContext
         {
             public UInt32[] k;
             public UInt32[] B;
-            //UInt32[] storedA;
             public UInt32[] v;
             public UInt32[] b;
             public UInt32[] K;
-            //UInt32[] storedx;
             public UInt32[] u;
-            //UInt32[] storedS;
             public Byte[] s;
         }
 
@@ -134,47 +131,35 @@ namespace HomeKit_Test
         bool stateEventQueued = false;
         bool light = false;
 
-        struct pairing
+        struct Pairing
         {
             public Byte[] dataDeviceLTPK;
             public Byte[] dataDevicePairingID;
             public Byte dataPermissions;
         }
 
-        pairing[] pairings = new pairing[16];
+        Pairing[] pairings = new Pairing[16];
         
         
         Byte[] dataAccessoryLTSK = new byte[] {0x9d, 0x61, 0xb1, 0x9d, 0xef, 0xfd, 0x5a, 0x60, 0xba, 0x84, 0x4a, 0xf4, 0x92, 0xec, 0x2c, 0xc4,
                                         0x44, 0x49, 0xc5, 0x69, 0x7b, 0x32, 0x69, 0x19, 0x70, 0x3b, 0xac, 0x03, 0x1c, 0xae, 0x7f, 0x60};
         Byte[] accessoryLTPK;
-        string dataPairingID = "12:13:12:12:13:13";
+        readonly string dataPairingID = "12:13:12:12:13:13";
 
 
         const int DevicePort = 5252;
         const string DeviceCode = "143-83-105";
         const Byte generator = 5;
-        UInt32 configNum = 15;
+        readonly UInt32 configNum = 15;
         UInt32[] g = { generator };
-        Random random = new Random();
-        String userName = "Pair-Setup";
+        readonly Random random = new Random();
+        readonly String userName = "Pair-Setup";
         MulticastService mdns;
         ServiceDiscovery sd;
         ServiceProfile za;
 
-
-
         bool paired = false;
 
-        //Byte[] sessionKey;
-        //Byte[] devicePublicKey;
-        //Byte[] accessoryPublicKey;
- //       bool encryptedSession = false;
- //       Byte[] accToControlKey;
- //       Byte[] controlToAccKey;
- //       Byte[] sharedKey;
-        //UInt64c accToControlNonce;
-        //UInt64c controlToAccNonce;
-     //   bool evAccessoryFlagEnabled = false;
         int numConnects = 0;
         UInt64 loopCount = 0;
         int cycleDelay = 200;
@@ -213,7 +198,6 @@ namespace HomeKit_Test
 
         Session[] sessions = new Session[8];
 
-
         public HomeKit()
         {
             InitializeComponent();
@@ -224,7 +208,6 @@ namespace HomeKit_Test
             InitializeComponent();
             loopCountTimer.Enabled = false;
         }
-
 
         private void Form1_Load(object sender, EventArgs e)
         {
@@ -246,9 +229,11 @@ namespace HomeKit_Test
 
             label2.Text = DeviceCode;
 
-            mdns = new MulticastService(NetFilter);
-            mdns.UseIpv4 = true;
-            mdns.UseIpv6 = false;
+            mdns = new MulticastService
+            {
+                UseIpv4 = true,
+                UseIpv6 = false
+            };
 
             sd = new ServiceDiscovery(mdns);
 
@@ -263,249 +248,26 @@ namespace HomeKit_Test
             za.AddProperty("pv", "1.1");
             sd.Advertise(za);
             
-
             mdns.Start();
             sd.Announce(za);
            
             TCPListenerTask.RunWorkerAsync();
 
-            
-
-            int32Array A, B, mod;
-            A.digits = new uint[] { 0x06, 0xFFFFFFFF, 0xFFFF };
-            A.digits = new uint[] { 0x5 };
-
-            A.negative = false;
-            BigInteger bigA = new BigInteger(fromUInt32ArrayLE(A.digits).Concat(new Byte[] { 0 }).ToArray());
-
-            B.digits = new uint[] { 0xFFFFF };
-            ////b.digits = s.Concat(new UInt32[] {  0x12345678, 0x12345678, 0x12345678, 0x12345678, 0x12345678, 0x12345678, 0x12345678, 0x12345678, 
-            //                                    0x12345678, 0x12345678, 0x12345678, 0x12345678
-
-            //}).ToArray();
-            B.digits = new UInt32[] {   0xd1ff15eb , 0x16a1e0f1 , 0x0fb9ceaf , 0xb2b1db62 , 0x7b288f80 , 0xeb07c3ba , 0x5c182e5d , 0x141534d5,
-                                        0x6693bac4 , 0xdccda4c6 , 0x577a8179 , 0xe520c965 , 0xa4907a1a , 0x81c38c8b , 0x544fa6e3 , 0xf36091f1
-            };
-
-            //b.digits = new UInt32[] {   0xd1ff15eb , 0x16a1e0f1 , 0x0fb9ceaf , 0xb2b1db62 , 0x7b288f80 , 0xeb07c3ba , 0x5c182e5d , 0x141534d5,
-            //                            0x6693bac4 , 0xdccda4c6 , 0x577a8179 , 0xe520c965 , 0xa4907a1a , 0x81c38c8b , 0x8FFFFFFF
-            //};
-
-            //b.digits = new uint[] { 0x8FFFFFF, 0x8FFFFFFF, 0x8FFFFFFF };
-
-            B.digits = a;
-            B.negative = false;
-            BigInteger bigB = new BigInteger(fromUInt32ArrayLE(B.digits).Concat(new Byte[] { 0 }).ToArray());
-
-            mod.digits = new uint[] { 0xFFFFFFFF, 0xFFFFF };
-            mod.digits = N;
-
-            //mod.digits = new uint[] { 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000,
-            //    0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000,
-            //    0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000,
-            //    0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000,
-            //    0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000,
-            //    0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000,
-            //    0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000,
-            //    0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000,
-            //    0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000,
-            //    0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000,
-            //    0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000,
-            //    0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000, 0x5000000
-
-            //};
-            mod.negative = false;
-            BigInteger bigMod = new BigInteger(fromUInt32ArrayLE(mod.digits).Concat(new Byte[] { 0 }).ToArray());
-
-            int32Array testResult;
-            testResult.digits = new UInt32[] { 0 };
-            //testResult.negative = false;
-            // testResult = int32ArrayAddNoSign(a, b, mod);
-            //testResult.digits = UInt32ArraySubSimple(a.digits, b.digits);
-            //testResult.digits = UInt32ArrayMulNoSign(a.digits, b.digits, mod.digits);
-            //testResult.digits = UInt32ArrayMod(a.digits, mod.digits);
-            //testResult = int32ArraySHR(a);
-            //testResult.digits = UInt32PowMod(A.digits, b.digits, mod.digits);
-
-
-            UInt32[] q;
-
-            //UInt32ArrayDiv(new uint[] { 0xFFFFFFF2, 0XFFF}, new uint[] { 0xF2342342, 0x12}, out q, out testResult.digits) ;
-
-            //UInt32[] m = new uint[] { 7 };
-            //UInt32[] R = new uint[] { 0x0,0x0, 0x1 };
-            //UInt32[] ba = new uint[] { 0x0, 0x1 };
-
-            //UInt32[] R_inv = UInt32ArrayGetInverse(R, m);
-
-            //UInt32[] m_inv = UInt32ArrayGetInverse(m, ba);
-            //UInt32[] m_prime = UInt32ArraySubSimple(ba, m_inv);
-            //UInt32ArrayShrink(ref m_prime);
-
-            UInt32[] temp = new uint[] { 0xffffffff, 0xf };
-            UInt32[] temp1 = new uint[] { 0xfffffff };
-
-            Byte[] secret = new byte[] {0x9d, 0x61, 0xb1, 0x9d, 0xef, 0xfd, 0x5a, 0x60, 0xba, 0x84, 0x4a, 0xf4, 0x92, 0xec, 0x2c, 0xc4,
-                                        0x44, 0x49, 0xc5, 0x69, 0x7b, 0x32, 0x69, 0x19, 0x70, 0x3b, 0xac, 0x03, 0x1c, 0xae, 0x7f, 0x60};
-
-            secret = new byte[] {0x4c, 0xcd, 0x08, 0x9b, 0x28, 0xff, 0x96, 0xda, 0x9d, 0xb6, 0xc3, 0x46, 0xec, 0x11, 0x4e, 0x0f,
-                                        0x5b, 0x8a, 0x31, 0x9f, 0x35, 0xab, 0xa6, 0x24, 0xda, 0x8c, 0xf6, 0xed, 0x4f, 0xb8, 0xa6, 0xfb};
-
-            Byte[] msg = new byte[0];
-
-            msg = new byte[] { 0x72 };
-
-
-            Byte[] k_test = new Byte[] {    0xa5, 0x46, 0xe3, 0x6b, 0xf0, 0x52, 0x7c, 0x9d, 0x3b, 0x16, 0x15, 0x4b, 0x82, 0x46, 0x5e, 0xdd,
-                                            0x62, 0x14, 0x4c, 0x0a, 0xc1, 0xfc, 0x5a, 0x18, 0x50, 0x6a, 0x22, 0x44, 0xba, 0x44, 0x9a, 0xc4 };
-
-            Byte[] u = new byte[] {         0xe6, 0xdb, 0x68, 0x67, 0x58, 0x30, 0x30, 0xdb, 0x35, 0x94, 0xc1, 0xa4, 0x24, 0xb1, 0x5f, 0x7c,
-                                            0x72, 0x66, 0x24, 0xec, 0x26, 0xb3, 0x35, 0x3b, 0x10, 0xa9, 0x03, 0xa6, 0xd0, 0xab, 0x1c, 0x4c };
-
-            Byte[] aPrivate = new byte[] {  0x77, 0x07, 0x6d, 0x0a, 0x73, 0x18, 0xa5, 0x7d, 0x3c, 0x16, 0xc1, 0x72, 0x51, 0xb2, 0x66, 0x45,
-                                            0xdf, 0x4c, 0x2f, 0x87, 0xeb, 0xc0, 0x99, 0x2a, 0xb1, 0x77, 0xfb, 0xa5, 0x1d, 0xb9, 0x2c, 0x2a };
-
-            Byte[] bPrivate = new byte[] {  0x5d, 0xab, 0x08, 0x7e, 0x62, 0x4a, 0x8a, 0x4b, 0x79, 0xe1, 0x7f, 0x8b, 0x83, 0x80, 0x0e, 0xe6,
-                                            0x6f, 0x3b, 0xb1, 0x29, 0x26, 0x18, 0xb6, 0xfd, 0x1c, 0x2f, 0x8b, 0x27, 0xff, 0x88, 0xe0, 0xeb };
-
-            Byte[] nine = new byte[32];
-            nine[0] = 9;
-
-            //AddToLogBox(constants.constants.accDB);
-
-            //Byte[] aPublic = X25519(aPrivate, nine);
-            //Byte[] bPublic = X25519(bPrivate, nine);
-            //Byte[] kShared1 = X25519(bPrivate, aPublic);
-            //Byte[] kShared2 = X25519(aPrivate, bPublic);
-
-
-            //foreach (UInt32 i in aPublic)
-            //{
-            //    //AddToLogBox(i.ToString() + " " + i.ToString("X8") + "\r\n");
-            //    AddToLogBox(i.ToString("x2"));
-            //}
-            //AddToLogBox("\r\n");
-
-            //foreach (UInt32 i in bPublic)
-            //{
-            //    //AddToLogBox(i.ToString() + " " + i.ToString("X8") + "\r\n");
-            //    AddToLogBox(i.ToString("x2"));
-            //}
-            //AddToLogBox("\r\n");
-
-            //foreach (UInt32 i in kShared1)
-            //{
-            //    //AddToLogBox(i.ToString() + " " + i.ToString("X8") + "\r\n");
-            //    AddToLogBox(i.ToString("x2"));
-            //}
-            //AddToLogBox("\r\n");
-
-            //foreach (UInt32 i in kShared2)
-            //{
-            //    //AddToLogBox(i.ToString() + " " + i.ToString("X8") + "\r\n");
-            //    AddToLogBox(i.ToString("x2"));
-            //}
-            //AddToLogBox("\r\n");
-
-            //Byte[] publicKey = ed25519PublicKey(secret);
-
-            //Byte[] signature = ed25519sign(secret, msg);
-
-            //signature[22] = 0x69;
-
-            //msg = new byte[] { 0x71 };
-
-            //publicKey[12] = 0x24;
-
-
-            //bool result = ed25519verify(publicKey, msg, signature);
-
-            //addBigIntToLogBox(ed25519G.X);
-            //addBigIntToLogBox(ed25519G.Y);
-            //addBigIntToLogBox(ed25519G.Z);
-            //addBigIntToLogBox(ed25519G.T);
-
-
-            //UInt32[] inv = ed25519modInv(new uint[] { 0x1db42 });
-            //UInt32[] d = UInt32ArrayMulNoSign(new uint[] { 0x1db41 }, inv);
-            //d = UInt32ArrayMod(d, ed25519p);
-            //d = UInt32ArraySubSimple(ed25519p, d);
-
-            //UInt32ArraySHRWords(ref temp, 25);
-
-            //testResult.digits = UInt32ArrayMulNoSign(temp, temp1);
-
-
-            //AddToLogBox(result.ToString() + "\r\n");
-
-
-            //Byte[] byteTest = new byte[] { 0x69, 0x69 };
-
-
-            //appendTLVBytes(ref byteTest, 0x12, Enumerable.Repeat((Byte)0x61,300).ToArray());
-
-            //foreach (Byte i in byteTest)
-            //{
-            //    //AddToLogBox(i.ToString() + " " + i.ToString("X8") + "\r\n");
-            //    AddToLogBox(i.ToString("X2") + "\r\n");
-            //}
-
-            //       BigInteger bigIntTest = BigInteger.ModPow(bigA, bigB, bigMod);
-            //   AddToLogBox(bigIntTest.ToString("X8") + "\r\n");
-
-            //int testCmp = int32ArrayCmp(A, B);
-            //AddToLogBox(testCmp.ToString() + "\r\n");
-
         }
-        private IEnumerable<System.Net.NetworkInformation.NetworkInterface> NetFilter(IEnumerable<System.Net.NetworkInformation.NetworkInterface> InterfacesIn)
-        {
-
-            IEnumerable<System.Net.NetworkInformation.NetworkInterface> InterfacesOut;
-
-            //foreach(NetworkInterface CurNetworkInterface in InterfacesIn)
-            //{
-            //    MessageBox.Show(CurNetworkInterface.Name);
-            //}
-
-            InterfacesOut = InterfacesIn.Where(x => x.Name == "Ethernet 4");
-
-            //foreach (NetworkInterface CurNetworkInterface in InterfacesOut)
-            //{
-            //    MessageBox.Show(CurNetworkInterface.Name);
-            //}
-
-            return InterfacesOut;
-        }
+        
         bool queueAccessoryFlageEvent = false;
         private void TCPListenerTask_DoWork(object sender, DoWorkEventArgs e)
         {
             TcpListener server = new TcpListener(IPAddress.Any, DevicePort);
             server.Start();
-            //Byte[] bytes = new Byte[0xffff];
-            
-            
-
+           
             while (true)
             {
                 if (server.Pending())
                 {
 
-
                     TcpClient client = server.AcceptTcpClient();
                     AddToLogBox(client.Client.RemoteEndPoint.ToString() + " Connected\r\n");
-
-                    //if (client.Client.RemoteEndPoint.AddressFamily == AddressFamily.InterNetwork)
-                    //{
-                    //    IPAddress curIP = ((IPEndPoint)client.Client.RemoteEndPoint).Address;
-                    //    AddToLogBox(curIP.ToString() + "\r\n");
-                    //    if (!curIP.Equals(IPAddress.Parse("192.168.1.67")))
-                    //    {
-                    //        client.Close();
-                    //        continue;
-                    //    }
-
-
-                    //}
 
                     duplicateClientCheck(client);
 
@@ -523,7 +285,6 @@ namespace HomeKit_Test
 
                         sessions[curSessionId] = new Session();
                         Session curSession = sessions[curSessionId];
-
 
                         curSession.client = client;
                         curSession.request = null;
@@ -559,8 +320,6 @@ namespace HomeKit_Test
 
                     {
                         
-
-
                         if (curSession.client.Available != 0)
                         {
                             dataReceived = true;
@@ -664,8 +423,6 @@ namespace HomeKit_Test
                                             }
                                             else curSession.contentLength = 0;
 
-
-
                                             int contentStart = 0;
                                             for (int j = 0; j < msg.Length - 4; j++)
                                             {
@@ -683,7 +440,6 @@ namespace HomeKit_Test
                                             processHTTP(ref curSession);
                                             curSession.encDataReceived = 0;
 
-
                                         }
                                         else
                                         {
@@ -700,9 +456,7 @@ namespace HomeKit_Test
                                 }
 
                             }
-                           
-                            
-
+ 
                         }
                         else
                         {
@@ -1085,11 +839,6 @@ namespace HomeKit_Test
                                                     break;
                                                 }
 
-
-                                                //AddToLogBox("receivedPairingID\r\n");
-                                                //addBytesToLogBox(receivedPairingID);
-                                                //addBytesToLogBox(pairings[pairingID].dataDevicePairingID);
-
                                                 Byte[] deviceInfo = curSession.devicePublicKey;
                                                 deviceInfo = deviceInfo.Concat(receivedPairingID).ToArray();
                                                 deviceInfo = deviceInfo.Concat(curSession.accessoryPublicKey).ToArray();
@@ -1240,9 +989,6 @@ namespace HomeKit_Test
                             case "/accessories":
                                 {
                                     sendHAPResponse(ref curSession, "200", Encoding.UTF8.GetBytes(constants.constants.accDB), true);
-                                    //sendHAPResponse(stream, "200", Encoding.UTF8.GetBytes("fuck"), true);
-
-                                    
 
                                     break;
                                 }
@@ -1583,9 +1329,6 @@ namespace HomeKit_Test
 
             }
 
-            return 70409;
-
-
         }
 
         String jsonGetCharacteristicString(string jsonString, string key, int curPos, int curLength)
@@ -1688,11 +1431,6 @@ namespace HomeKit_Test
                 }
                 curPos += curLength + 3;
             }
-            
-
-
-            
-
             
         }
 
@@ -1835,46 +1573,18 @@ namespace HomeKit_Test
                 if (curLength > 1024) curLength = 1024;
                 Byte[] frame = new Byte[curLength];
                 for (int i = 0; i < curLength; i++) frame[i] = response[i + curPos];
-                if (true)
-                {
-
-                    sendBuffer = sendBuffer.Concat(AEADEncrypt(frame, curSession.accToControlKey, fromUInt64cLE(curSession.accToControlNonce))).ToArray();
-                    //Byte[] tempBuffer = AEADEncrypt(frame, accToControlKey, fromUInt64cLE(accToControlNonce));
-                    //stream.Write(tempBuffer, 0, tempBuffer.Length);
-
-                }
-                else
-                {
-                    sendBuffer = sendBuffer.Concat(AEADEncrypt(frame, curSession.controlToAccKey, fromUInt64cLE(curSession.controlToAccNonce))).ToArray();
-                    AddToLogBox("Skipped Nonce\r\n");
-                }
+              
+                sendBuffer = sendBuffer.Concat(AEADEncrypt(frame, curSession.accToControlKey, fromUInt64cLE(curSession.accToControlNonce))).ToArray();
+              
                 curSession.accToControlNonce = UInt64cInc(curSession.accToControlNonce);
                 curPos += curLength;           
             }
 
             AddToLogBox(curSession.client.Client.RemoteEndPoint.ToString()+ ": Send Response: " + sendBuffer.Length + "\r\n");
             AddToLogBox("accToControlNonce: " + curSession.accToControlNonce.hi.ToString() + curSession.accToControlNonce.lo.ToString() + "\r\n");
-            //AddToLogBox(Encoding.UTF8.GetString(response) + "\r\n");
+            
             curSession.stream.Write(sendBuffer, 0, sendBuffer.Length);
 
-            Byte[] decrypted;
-            
-            //curPos = 0;
-            //while (curPos < sendBuffer.Length)
-            //{
-            //    int curLength = sendBuffer[curPos] + sendBuffer[curPos + 1] * 0x100;
-            //    Byte[] tempBuffer = new byte[curLength + 18];
-            //    for (int i = 0; i < curLength + 18; i++) tempBuffer[i] = sendBuffer[i + curPos];
-            //    UInt64c tempNonce64;
-            //    tempNonce64.lo = tempNonce; tempNonce64.hi = 0;
-            //    Byte[] tempResponse;
-            //    bool testResult = AEADDecrypt(tempBuffer, curSession.accToControlKey, tempNonce64, curLength + 2 + 16, out tempResponse);
-            //    AddToLogBox(testResult.ToString() + " Nonce: " + tempNonce.ToString() + " Length: " + curLength.ToString() + " Position: " + curPos.ToString() + " \r\n");
-            //    tempNonce++;
-            //    curPos += curLength + 18;
-
-            //}
-            //AddToLogBox("\r\n");
             if (isEvent) AddToLogBox("Event Response: " + Encoding.UTF8.GetString(response) + "\r\n");
         }
 
@@ -1937,8 +1647,6 @@ namespace HomeKit_Test
                 return returnVal;
             }
             else return null;
-
-
 
         }
         
@@ -2031,7 +1739,6 @@ namespace HomeKit_Test
             curSession.stream.Write(bytes, 0, bytes.Length);
 
             return;
-
 
         }
 
@@ -2127,11 +1834,10 @@ namespace HomeKit_Test
                         }
 
                     }
-                    //blocks[i, j].lo = (uint)msg[basePosition + 0] << 24 | (uint)msg[basePosition + 1] << 16 | (uint)msg[basePosition + 2] << 8 | (uint)msg[basePosition + 3] << 0;
-                    //blocks[i, j].hi = (uint)msg[basePosition + 4] << 24 | (uint)msg[basePosition + 5] << 16 | (uint)msg[basePosition + 6] << 8 | (uint)msg[basePosition + 7] << 0;
+                   
                 }
             }
-            //          blocks[numBlocks - 1, 15].hi = (uint)((msg.Length - 1) * 8) / (uint)Math.Pow(2, 32); //ignore lengths above 2^32 bits, would overflow Arduino
+            
             blocks[numBlocks - 1, 15].lo = (uint)((msg.Length - 1) * 8);
 
             for (int i = 0; i < numBlocks; i++)
@@ -2165,13 +1871,6 @@ namespace HomeKit_Test
                 H[7] = UInt64cAdd(H[7], h);
             }
 
-            //foreach (UInt64c i in H)
-            //{
-            //    AddToLogBox(i.hi.ToString("X8").ToLower());
-            //    AddToLogBox(i.lo.ToString("X8").ToLower() + "\r\n");
-
-            //}
-
             for (int i = 0; i < 8; i++)
             {
                 for (int j = 0; j < 8; j++)
@@ -2187,11 +1886,7 @@ namespace HomeKit_Test
         private void button1_Click(object sender, EventArgs e)
         {
 
-
             CryptoTest.RunWorkerAsync();
-
-
-
 
         }
         UInt64c ROTR(UInt64c x, int n)
@@ -2343,19 +2038,6 @@ namespace HomeKit_Test
             return returnVal;
         }
 
-        Byte[] genVerifier(Byte[] salt, String pass)
-        {
-            // Byte[] x = genSHA512(Encoding.UTF8.GetString(salt) + pass);
-
-            return null;
-        }
-
-        Byte[] modular_pow(uint b, Byte[] e, Byte[] m)
-        {
-            return null;
-
-        }
-
         UInt32[] toUInt32Array(Byte[] byteArray)
         {
             int outputSize = (int)Math.Ceiling((decimal)byteArray.Length / 4);
@@ -2502,11 +2184,6 @@ namespace HomeKit_Test
         int int32ArrayCmpNoSign(int32Array a, int32Array b)  //return 1 if a>b, -1 if b<a, 0 if a=b
         {
 
-            //  int signDif = 0;
-
-            //  if (a.negative & !b.negative) signDif = -1;
-            //  if (!a.negative & b.negative) signDif = 1;
-
             int n = a.digits.Length;
             if (n < b.digits.Length) n = b.digits.Length;
 
@@ -2514,10 +2191,10 @@ namespace HomeKit_Test
             {
                 UInt32 aDigit = 0;
                 UInt32 bDigit = 0;
-                // byte newCarry = 0;
+             
                 if (i < a.digits.Length) aDigit = a.digits[i];
                 if (i < b.digits.Length) bDigit = b.digits[i];
-                //     if ((aDigit != 0 | bDigit != 0) & signDif != 0) return signDif;
+                
                 if (aDigit > bDigit) return 1;
                 if (aDigit < bDigit) return -1;
             }
@@ -2539,57 +2216,11 @@ namespace HomeKit_Test
 
         }
 
-        int32Array int32ArrayModSlow(int32Array a, int32Array mod)
-        {
-            int32Array c;
-            c.digits = new uint[mod.digits.Length];
-            c.negative = false;
-
-            int cmpResult = int32ArrayCmp(a, mod);
-            if (cmpResult == 0) return c;
-            if (cmpResult == -1) return a;
-
-            int n = mod.digits.Length;
-
-
-
-            int32Array curDigits;
-            curDigits.digits = new UInt32[n + 1];
-            curDigits.negative = false;
-            int32Array curRemainder;
-            curRemainder.digits = new UInt32[n + 1];
-            curRemainder.negative = false;
-
-
-            for (int i = a.digits.Length - 1; i >= 0; --i)
-            {
-
-                for (int j = n; j > 0; --j)
-                {
-                    curDigits.digits[j] = curRemainder.digits[j - 1];
-                }
-                curDigits.digits[0] = a.digits[i];
-                while (int32ArrayCmp(curDigits, mod) == 1)
-                {
-                    curDigits.digits = UInt32ArraySubSimple(curDigits.digits, mod.digits);
-                    // updateStatusLbl(curDigits.digits[0].ToString("X8"));
-                }
-                curRemainder = curDigits;
-            }
-
-            c.digits = curRemainder.digits;
-
-            return c;
-
-        }
-
         UInt32[] UInt32ArrayMod(UInt32[] aIn, UInt32[] modIn)
         {
             UInt32ArrayDiv(aIn, modIn, out _, out uint[] r);
 
             return r;
-
-
 
         }
 
@@ -2646,7 +2277,6 @@ namespace HomeKit_Test
                 }
                 borrow = newBorrow;
 
-
             }
             return c;
 
@@ -2675,16 +2305,7 @@ namespace HomeKit_Test
 
         int32Array int32ArraySHR(int32Array a)
         {
-            //int n = a.digits.Length;
-            //for (int i = 0; i < n; i++)
-            //{
-            //    a.digits[i] = a.digits[i] >> 1;
-            //    if (i != n - 1)
-            //    {
-            //        a.digits[i] |= a.digits[i + 1] << 31;
-            //    }
-            //}
-
+         
             a.digits = UInt32ArraySHR(a.digits);
 
             return a;
@@ -2726,9 +2347,7 @@ namespace HomeKit_Test
             {
                 for (int j = 0; j < b.Length; j++)
                 {
-                    //UInt64c pA64, pB64, pC64, pD64;
                     
-
                     p64[0].lo = (a[i] & 0xFFFF) * (b[j] & 0xFFFF);
                     p64[0].hi = 0;
                     UInt32 pB = (a[i] & 0xFFFF) * (b[j] >> 16);
@@ -2739,9 +2358,6 @@ namespace HomeKit_Test
                     p64[2].hi = pC >> 16;
                     p64[3].lo = 0;
                     p64[3].hi = (a[i] >> 16) * (b[j] >> 16);
-
-                    //pA64 = UInt64cAdd(pA64, pB64, pC64, pD64);
-
 
                     for (int k = 1; k < 4; k++)
                     {
@@ -2754,7 +2370,6 @@ namespace HomeKit_Test
                     {
                         p64[0].hi += p64[k].hi;
                     }
-
 
                     byte carry = 0;
                     
@@ -2805,8 +2420,6 @@ namespace HomeKit_Test
             UInt32[][] powers = new UInt32[n][];
             powers[0] = a;
 
-
-
             curPower = a;
             for (int i = 0; i < n; i++)
             {
@@ -2816,14 +2429,7 @@ namespace HomeKit_Test
                     returnVal = UInt32ArrayMulMod(curPower, returnVal, mod);
                 }
                 curPower = UInt32ArrayMulMod(curPower, curPower, mod);
-                //for (int j=curPower.Length -1; j>=0; j--)
-                //{
-                //    if (curPower[j] > 0)
-                //    {
-                //        AddToLogBox((j+1).ToString() + "\r\n");
-                //        break;
-                //    }
-                //}
+               
                 UInt32ArraySHR(powShift);
                 updateStatusLbl(i.ToString());
             }
@@ -2850,32 +2456,6 @@ namespace HomeKit_Test
         private void CryptoTest_DoWork(object sender, DoWorkEventArgs e)
         {
 
-
-        //    storedx = generatePrivateKey(s, "alice", "password123");
-        //    storedv = generateVerifier(storedx);
-        //    storedk = generateMultiplier();
-        //    storedA = generatePublicA(a);
-        //    storedB = generatePublicB(storedk, storedv, b);
-        //    storedu = generateScrambling(storedA, storedB);
-        //    storedS = generateSessionSecret(storedA, storedv, storedu, b);
-        //    storedK = generateSessionKey(storedS);
-
-        //    foreach (UInt32 i in storedK)
-        //    {
-        //        AddToLogBox(i.ToString("X8") + "\r\n");
-        //    }
-
-
-
-        //    //Byte[] zeroByte = { 0x0 };
-
-
-        //    //BigInteger bigN = new BigInteger(fromUInt32Array(N).Concat(new Byte[] { 0 }).ToArray());
-        //    //BigInteger bigx = new BigInteger(hashBytes.Concat(zeroByte).ToArray());
-        //    //BigInteger bigG = new BigInteger(5);
-        //    //BigInteger bigv = BigInteger.ModPow(bigG, bigx, bigN);
-
-        //    //AddToLogBox(bigv.ToString("X8") + "\r\n");
         }
 
         Byte[] byteArrayReverse(Byte[] a)
@@ -2894,14 +2474,12 @@ namespace HomeKit_Test
         {
             UInt32[] x = generatePrivateKey(salt, authString);
 
-
-
             return generateVerifier(x);
         }
 
         UInt32[] generateVerifier(UInt32[] x)
         {
-            //UInt32[] g = { generator };
+            
             return UInt32PowModMonty(g, x, N);
 
         }
@@ -3166,7 +2744,7 @@ namespace HomeKit_Test
             updateStatusLbl("Started");
             UInt32[] R = new UInt32[m.Length + 1];
             R[m.Length] = 0x1;
-            //UInt32[] R_inv = UInt32ArrayGetInverse(R, m);
+            
             UInt32[] ba = new UInt32[] { 0x0, 0x1 };
             UInt32[] m_inv = UInt32ArrayGetInverse(m, ba);
             UInt32[] m_prime = UInt32ArraySubSimple(R, m_inv);
@@ -3209,7 +2787,6 @@ namespace HomeKit_Test
 
             foreach (UInt32 i in testResult)
             {
-                //AddToLogBox(i.ToString() + " " + i.ToString("X8") + "\r\n");
                 AddToLogBox(i.ToString("X8") + "\r\n");
             }
         }
@@ -3219,13 +2796,6 @@ namespace HomeKit_Test
             
 
             Byte[] PRK = genHMACSHA512(salt, IKM); //extract
-
-            //AddToLogBox("PRK:\r\n");
-            //foreach (Byte i in PRK)
-            //{
-            //    AddToLogBox(i.ToString("X2") + "\r\n");
-
-            //}
 
             int n = (int)Math.Ceiling((decimal)L / PRK.Length);
 
@@ -3255,19 +2825,7 @@ namespace HomeKit_Test
 
             private void button4_Click(object sender, EventArgs e)
         {
-            //Byte[] IKM = new byte[] { 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b, 0x0b };
-            //Byte[] salt = new byte[] { 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c };
-            //Byte[] info = new byte[] { 0xf0, 0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xf9 };
-
-
-            //Byte[] testResult = genHKDFSHA512(IKM, salt, info, 42);
-
-
-            //UInt32[] testVector = new UInt32[] { 0x11111111, 0x01020304, 0x9b8d6f43, 0x01234567 };
-
-            //chacha20Quarter(ref testVector[0], ref testVector[1], ref testVector[2], ref testVector[3]);
-
-            
+                        
             byte[] testKey = new byte[] {   0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
                                             0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f};
             byte[] testNonce = new byte[] { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x4a, 0x00, 0x00, 0x00, 0x00 };
@@ -3330,7 +2888,6 @@ namespace HomeKit_Test
             for (int i = 0; i < B; i++) K_opad[i] = (byte)(K[i] ^ 0x5c);
 
             return genSHA512(K_opad, genSHA512(K_ipad, toHash));
-
 
         }
 
@@ -3423,8 +2980,6 @@ namespace HomeKit_Test
 
         }
 
-       
-
         Byte[] poly1305 (Byte[] key, Byte[] msg)
         {
 
@@ -3474,7 +3029,6 @@ namespace HomeKit_Test
             for (int i = 0; i < 16; i++) returnVal[i] = A_Bytes[i];
 
             return returnVal;
-
 
         }
 
@@ -3557,11 +3111,6 @@ namespace HomeKit_Test
             X25519a24.negative = false;
             X25519a24.digits = new UInt32[] { 0x1db41 };
 
-            //addBigIntToLogBox(ed25519G.X);
-
-
-
-            
         }
 
         Byte[] ed25519sign(Byte[] secret, Byte[] msg)
@@ -3632,7 +3181,6 @@ namespace HomeKit_Test
 
         }
 
-
         UInt32[] ed25519recover_x(UInt32[] y, int sign)
         {
             UInt32[] y2 = UInt32ArrayMulNoSign(y, y);
@@ -3659,7 +3207,6 @@ namespace HomeKit_Test
 
         UInt32[] ed25519modInv(UInt32[] x)
         {
-            //if (UInt32ArrayCmpNoSign(x, ed25519p) != -1) x = UInt32ArrayMod(x, ed25519p);
             return UInt32PowModMonty(x, UInt32ArraySubSimple(ed25519p, new UInt32[] { 0x2 }), ed25519p);
         }
 
@@ -3683,7 +3230,6 @@ namespace HomeKit_Test
             UInt32[] temp2;
             return ed25519PublicKey(signingKey, out temp, out temp2);
         }
-
 
         Byte[] ed25519PublicKey(byte[] signingKey, out Byte[] prefix, out UInt32[] a)
         {
@@ -3781,7 +3327,31 @@ namespace HomeKit_Test
 
         int32Array int32ArrayModBarrett(int32Array xIn, UInt32[] mod, UInt32[] mu)
         {
-            
+
+            int32Array r;
+            int cmpResult = UInt32ArrayCmpNoSign(xIn.digits, mod); //check for trivial cases
+            if (cmpResult == 0) //if xIn == mod return 0
+            {
+                r.digits = new uint[] { 0 };
+                r.negative = false;
+                return r;
+            }
+            if (cmpResult == -1) //if magnitude of xIn < mod bypass
+            {
+                r.digits = new UInt32[xIn.digits.Length];
+                for (int i = 0; i < xIn.digits.Length; i++)
+                {
+                    r.digits[i] = xIn.digits[i];
+                }
+                
+                if (xIn.negative) r.digits = UInt32ArraySubSimple(mod, r.digits); //if xIn is negative add mod
+                r.negative = false;
+
+                UInt32ArrayShrink(ref r.digits);
+
+                return r;
+            }
+
             int k = mod.Length;
 
             if (xIn.digits.Length > 2 * k) throw new InvalidOperationException("x too big");
@@ -3797,7 +3367,7 @@ namespace HomeKit_Test
 
             UInt32[] r1 = UInt32ArrayModB(x, k + 1);
             UInt32[] r2 = UInt32ArrayModB(UInt32ArrayMulNoSign(q3, mod), k + 1);
-            int32Array r = int32ArraySub(r1, r2);
+            r = int32ArraySub(r1, r2);
 
             if (r.negative) r = int32ArrayAdd(r, int32Array_bton(k + 1));
             while (UInt32ArrayCmpNoSign(r.digits, mod) >= 0) r.digits = UInt32ArraySubSimple(r.digits, mod);
@@ -3861,10 +3431,8 @@ namespace HomeKit_Test
             int32Array A = int32ArrayMul(int32ArrayQuickMod(int32ArraySub(P.Y, P.X), ed25519p), int32ArrayQuickMod(int32ArraySub(Q.Y, Q.X), ed25519p));
             int32Array B = int32ArrayMul(int32ArrayQuickMod(int32ArrayAdd(P.Y, P.X), ed25519p), int32ArrayQuickMod(int32ArrayAdd(Q.Y, Q.X), ed25519p));
 
-
             A = int32ArrayModBarrett(A, ed25519p, ed25519mu);
             B = int32ArrayModBarrett(B, ed25519p, ed25519mu);
-
 
             int32Array C = int32ArrayMul(P.T, Q.T);
             C = int32ArrayModBarrett(C, ed25519p, ed25519mu);
@@ -3873,19 +3441,15 @@ namespace HomeKit_Test
             C.digits = UInt32ArraySHL(C.digits);
             C = int32ArrayQuickMod(C, ed25519p);
             
-            
             int32Array D = int32ArrayMul(P.Z, Q.Z);
             D = int32ArrayModBarrett(D, ed25519p, ed25519mu);
             D.digits = UInt32ArraySHL(D.digits);
             D = int32ArrayQuickMod(D, ed25519p);
 
-
             int32Array E = int32ArrayQuickMod(int32ArraySub(B, A), ed25519p);
             int32Array F = int32ArrayQuickMod(int32ArraySub(D, C), ed25519p);
             int32Array G = int32ArrayQuickMod(int32ArrayAdd(D, C), ed25519p);
             int32Array H = int32ArrayQuickMod(int32ArrayAdd(B, A), ed25519p);
-
-
 
             pointExtUInt32 returnVal;
             returnVal.X = int32ArrayModBarrett(int32ArrayMul(E, F), ed25519p, ed25519mu);
@@ -4079,8 +3643,6 @@ namespace HomeKit_Test
             if (x.negative) xBigInt = xBigInt * -1;
 
             AddToLogBox(xBigInt.ToString() + "\r\n");
-
-       
 
         }
 
